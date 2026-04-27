@@ -1,5 +1,9 @@
 # Vote — Technical Architecture
 
+For front-end specific conventions (project structure, state management, styling patterns), see [`front-end-guidelines.md`](front-end-guidelines.md).
+
+---
+
 ## Technology choices
 
 | Layer | Technology | Rationale |

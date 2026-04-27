@@ -4,18 +4,6 @@
 
 Vote is a lightweight, real-time voting platform for teams. It is designed to run alongside existing communication tools (Google Meet, Zoom, in-person) and let a group vote on arbitrary prompts with minimal friction. There is no account system — rooms are ephemeral, and participants get temporary identities automatically.
 
-## Architecture overview
-
-```
-Browser (React SPA)  ←→  Express backend (Node.js)  ←→  (future: persistent storage)
-     Docker container           Docker container
-         port 5173/80               port 3000
-```
-
-Both services are deployed to Google Cloud Run. The frontend is a static SPA served by nginx in production. The backend handles room state and real-time updates (WebSockets or SSE — TBD).
-
----
-
 ## User roles
 
 | Role | How they get it |
@@ -45,6 +33,8 @@ On join, the backend assigns the participant a random `<adjective>-<animal>` nam
 ---
 
 ## Room UI
+
+For colours, spacing, typography, and component visual specifications, see [`visual-design.md`](visual-design.md).
 
 ### Layout
 
@@ -123,7 +113,7 @@ The backend must push the following events to all connected clients:
 | Results published | average vote (and future stats) |
 | Room reset | clears results, returns to voting stage |
 
-Implementation: WebSockets (preferred) or Server-Sent Events + REST for writes.
+Implementation: WebSockets via Socket.io. See [`project-architecture.md`](project-architecture.md) for the full event contract.
 
 ---
 

@@ -1,7 +1,12 @@
+import { Routes, Route } from 'react-router-dom'
+import LandingPage from './pages/LandingPage.jsx'
+import RoomPage from './pages/RoomPage.jsx'
+
 export default function App() {
   return (
-    <div style={{ fontFamily: 'sans-serif', textAlign: 'center', marginTop: '4rem' }}>
-      <h1>Hello World</h1>
-    </div>
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/room/:roomId" element={<RoomPage />} />
+    </Routes>
   )
 }

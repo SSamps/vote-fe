@@ -1,6 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
-import LandingPage from './pages/LandingPage.jsx'
-import RoomPage from './pages/RoomPage.jsx'
+import LandingPage from './pages/LandingPage.tsx'
+import RoomPage from './pages/RoomPage.tsx'
 
 export default function App() {
   return (

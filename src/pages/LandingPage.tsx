@@ -2,11 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from './LandingPage.module.css'
 
-// Injected at build time via VITE_BACKEND_URL env var; falls back to localhost for local dev
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000'
 
-// If the user pastes a full room URL instead of a bare code, extract the code
-function extractRoomCode(input) {
+function extractRoomCode(input: string): string {
   const trimmed = input.trim()
   try {
     const url = new URL(trimmed)
@@ -23,16 +21,16 @@ export default function LandingPage() {
   const [roomCode, setRoomCode] = useState('')
   const [creating, setCreating] = useState(false)
   const [joining, setJoining] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleCreate() {
     setCreating(true)
     setError(null)
     try {
-      // POST /rooms — backend creates room and returns { roomId }
       const res = await fetch(`${BACKEND_URL}/rooms`, { method: 'POST' })
       if (!res.ok) throw new Error(`Unexpected status ${res.status}`)
-      const { roomId } = await res.json()
+      const { roomId, token } = (await res.json()) as { roomId: string; token: string }
+      sessionStorage.setItem(`facilitator-token-${roomId}`, token)
       navigate(`/room/${roomId}?role=facilitator`)
     } catch {
       setError('Could not create a room. Is the backend running?')
@@ -41,14 +39,13 @@ export default function LandingPage() {
     }
   }
 
-  async function handleJoin(e) {
+  async function handleJoin(e: React.FormEvent) {
     e.preventDefault()
     const code = extractRoomCode(roomCode)
     if (!code) return
     setJoining(true)
     setError(null)
     try {
-      // GET /rooms/:roomId — validates the room exists before opening a socket
       const res = await fetch(`${BACKEND_URL}/rooms/${code}`)
       if (res.status === 404) {
         setError('Room not found. Check the code and try again.')
@@ -57,7 +54,7 @@ export default function LandingPage() {
       if (!res.ok) throw new Error(`Unexpected status ${res.status}`)
       navigate(`/room/${code}`)
     } catch (err) {
-      if (!err.message.startsWith('Unexpected')) {
+      if (err instanceof Error && !err.message.startsWith('Unexpected')) {
         setError('Could not reach the server. Is the backend running?')
       }
     } finally {

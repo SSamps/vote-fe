@@ -16,7 +16,7 @@ This document defines the conventions, technology choices, and patterns that gov
 | CSS approach | CSS Modules + CSS custom properties | Scoped by default, zero runtime cost, no build-time complexity |
 | CSS framework | **None** | Tailwind and Bootstrap add tooling complexity and fight the design; CSS Modules are sufficient |
 | Global state | React Context + `useReducer` | Sufficient for the single shared state object (room state); no external library needed |
-| Type system | Plain JSX (no TypeScript) | Keeps the toolchain simple; can be added incrementally later |
+| Type system | TypeScript (strict) | Full type safety; Vite handles transpilation natively with no extra build step |
 
 ### Why no component library?
 
@@ -31,13 +31,15 @@ src/
   pages/              — One file per route; maps directly to React Router <Route> entries
   components/         — Reusable presentational components, each in its own sub-folder
     VoteButton/
-      VoteButton.jsx
+      VoteButton.tsx
       VoteButton.module.css
   hooks/              — Custom React hooks; encapsulate socket logic and shared business rules
   lib/                — Pure utility functions with no React dependency
+  types/              — Shared TypeScript types and interfaces
+  vite-env.d.ts       — Vite environment variable type declarations
   index.css           — Global reset + CSS custom properties (design tokens)
-  App.jsx             — Route definitions only
-  main.jsx            — React root mount; wraps app in BrowserRouter
+  App.tsx             — Route definitions only
+  main.tsx            — React root mount; wraps app in BrowserRouter
 ```
 
 ### Pages vs components
@@ -46,6 +48,23 @@ src/
 - **Components** (`src/components/`) are reusable UI pieces that receive props and render UI. They have no knowledge of routing or socket state.
 
 A component that is only ever used in one place and is non-trivial can live in its own folder under `components/` anyway — this keeps pages readable.
+
+### TypeScript conventions
+
+- All component files use `.tsx`; all non-JSX files use `.ts`.
+- Run `npm run typecheck` (`tsc --noEmit`) to type-check without building.
+- Vite transpiles TypeScript at dev and build time; `tsc` is used only for type-checking.
+- Prefer explicit prop interfaces over inline types for anything non-trivial:
+  ```tsx
+  interface VoteButtonProps {
+    value: number
+    selected: boolean
+    disabled: boolean
+    onClick: () => void
+  }
+  export default function VoteButton({ value, selected, disabled, onClick }: VoteButtonProps) {
+  ```
+- Socket.io event payloads received from the server should be typed to match the backend `ServerToClientEvents` interface. Keep a shared `src/types/` folder for types used across multiple files.
 
 ---
 

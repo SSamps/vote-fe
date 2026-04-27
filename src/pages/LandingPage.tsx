@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+
 import styles from './LandingPage.module.css'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000'
@@ -72,9 +73,7 @@ export default function LandingPage() {
       <main className={styles.main}>
         <section className={styles.card}>
           <h2 className={styles.cardTitle}>Start a session</h2>
-          <p className={styles.cardDescription}>
-            Create a room and share the link with your team.
-          </p>
+          <p className={styles.cardDescription}>Create a room and share the link with your team.</p>
           <button
             className={`${styles.button} ${styles.buttonPrimary}`}
             onClick={handleCreate}
@@ -98,7 +97,7 @@ export default function LandingPage() {
               type="text"
               placeholder="Room code or URL"
               value={roomCode}
-              onChange={e => setRoomCode(e.target.value)}
+              onChange={(e) => setRoomCode(e.target.value)}
               disabled={joining}
               autoComplete="off"
               spellCheck={false}

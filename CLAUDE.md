@@ -45,3 +45,12 @@ The prod Dockerfile is a two-stage build — the final image contains only the c
 ## Architecture
 
 This is a plain React SPA. Entry point is `index.html` → `src/main.jsx` (mounts React root) → `src/App.jsx` (top-level component). No routing, state management, or backend integration yet.
+
+## Documentation
+
+The `docs/` directory contains the full product and technical design for the application:
+
+- [`docs/design.md`](docs/design.md) — Product design: purpose, user roles, user flows, room UI layout, facilitator workflow, participant naming, and real-time event model.
+- [`docs/architecture.md`](docs/architecture.md) — Technical architecture: technology choices, server-side state model, connection lifecycle, REST endpoints, Socket.io event contracts (client→server and server→client with full JSON shapes), environment variables, and scaling considerations.
+
+Read both documents before making changes to understand intended behaviour and the agreed technical contracts between frontend and backend.

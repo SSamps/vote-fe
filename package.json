@@ -1,0 +1,34 @@
+{
+  "name": "vote",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon -e '*' -w docker/dev -w package.json -w vite.config.js -w index.html --exec npm run dev:rebuildContainer",
+    "dev:rebuildContainer": "npm run dev:dockerRemoveContainer && npm run dev:dockerBuildImage && npm run dev:dockerRunContainer",
+    "dev:dockerRemoveContainer": "docker rm vote-fe-dev -f",
+    "dev:dockerRemoveImage": "docker rmi vote-fe:dev -f",
+    "dev:dockerBuildImage": "docker build -t vote-fe:dev -f docker/dev/Dockerfile .",
+    "dev:dockerRunContainer": "docker run --name vote-fe-dev -v $(pwd)/src:/app/src -v $(pwd)/index.html:/app/index.html -v $(pwd)/vite.config.js:/app/vite.config.js -d -p 5173:5173 vote-fe:dev",
+    "preview": "npm run preview:dockerRemoveContainer && npm run preview:dockerRemoveImage && npm run preview:dockerBuildImage && npm run preview:dockerRunContainer",
+    "preview:dockerRemoveContainer": "docker rm vote-fe-preview --force",
+    "preview:dockerRemoveImage": "docker image rm vote-fe-preview:latest --force",
+    "preview:dockerBuildImage": "docker build -t vote-fe-preview:latest -f Dockerfile .",
+    "preview:dockerRunContainer": "docker run --name vote-fe-preview -d -p 8080:80 vote-fe-preview:latest",
+    "prod": "npm run prod:dockerRemoveImage && npm run prod:dockerBuildImage && npm run prod:dockerPush",
+    "prod:dockerRemoveImage": "docker image rm your-registry/vote-fe --force",
+    "prod:dockerBuildImage": "docker build -t your-registry/vote-fe -f Dockerfile .",
+    "prod:dockerPush": "docker push your-registry/vote-fe",
+    "runDevServer": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "nodemon": "^3.1.4",
+    "vite": "^5.4.1"
+  }
+}

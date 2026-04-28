@@ -124,7 +124,7 @@ The socket connection is **not** opened directly in a component or hook. Instead
 `RoomPage` communicates with the worker through a `MessagePort`:
 
 ```ts
-// In RoomPage (or a useRoom hook wrapping it):
+// Inside a useEffect in RoomPage:
 const worker = new SharedWorker(
   new URL('../workers/roomWorker.ts', import.meta.url),
   { type: 'module' },
@@ -134,8 +134,23 @@ worker.port.postMessage({ type: 'join', backendUrl: BACKEND_URL, roomId, role, t
 
 worker.port.onmessage = (e: MessageEvent<WorkerToTabMessage>) => {
   const msg = e.data
-  if (msg.type === 'room:state') dispatch({ type: 'ROOM_STATE', payload: msg.payload })
-  else if (msg.type === 'participant:joined') dispatch({ type: 'PARTICIPANT_JOINED', payload: msg.payload })
+  if (msg.type === 'room:state') {
+    setStage(msg.payload.stage)
+    setQuestions(msg.payload.questions)
+    setMyVotes(msg.payload.myVotes)
+    setResults(msg.payload.results)
+    setParticipants(msg.payload.participants)
+    // ...
+  } else if (msg.type === 'stage:changed') {
+    setStage(msg.payload.stage)
+    if (msg.payload.stage === 'voting') {
+      setQuestions(msg.payload.questions ?? [])
+      setMyVotes((msg.payload.questions ?? []).map(() => null))
+      setParticipants((prev) => prev.map((p) => ({ ...p, voteCount: 0 })))
+    }
+  } else if (msg.type === 'force-leave') {
+    navigate('/')
+  }
   // ... etc.
 }
 
@@ -160,47 +175,40 @@ Key points:
   available in all tabs.
 - `connect_error` and `error` messages from the worker carry rejection messages from the
   server's `io.use()` middleware. Display them to the user.
+- `force-leave` is a special worker-to-tab message (not a socket event) broadcast to all
+  tabs when the facilitator explicitly closes the room via the Leave button. Each tab
+  navigates to the landing page on receipt.
 
-#### Room state hook pattern
+#### Tab → Worker message types
 
 ```ts
-// hooks/useRoom.ts — owns worker lifecycle and all room event handling
-export function useRoom(roomId: string, role: Role, token: string | null) {
-  const [state, dispatch] = useReducer(roomReducer, initialState)
-
-  useEffect(() => {
-    const worker = new SharedWorker(
-      new URL('../workers/roomWorker.ts', import.meta.url),
-      { type: 'module' },
-    )
-    worker.port.start()
-    worker.port.postMessage({ type: 'join', backendUrl: BACKEND_URL, roomId, role, token })
-
-    worker.port.onmessage = (e: MessageEvent<WorkerToTabMessage>) => {
-      const msg = e.data
-      if (msg.type === 'room:state') dispatch({ type: 'ROOM_STATE', payload: msg.payload })
-      else if (msg.type === 'participant:joined') dispatch({ type: 'PARTICIPANT_JOINED', payload: msg.payload })
-      else if (msg.type === 'participant:left') dispatch({ type: 'PARTICIPANT_LEFT', payload: msg.payload })
-      else if (msg.type === 'participant:voted') dispatch({ type: 'PARTICIPANT_VOTED', payload: msg.payload })
-      else if (msg.type === 'stage:changed') dispatch({ type: 'STAGE_CHANGED', payload: msg.payload })
-      else if (msg.type === 'results') dispatch({ type: 'RESULTS', payload: msg.payload })
-      else if (msg.type === 'room:reset') dispatch({ type: 'ROOM_RESET' })
-      else if (msg.type === 'room:closed') dispatch({ type: 'ROOM_CLOSED' })
-      else if (msg.type === 'connect_error') dispatch({ type: 'CONNECTION_ERROR', message: msg.message })
-    }
-
-    return () => {
-      worker.port.postMessage({ type: 'leave' })
-      worker.port.close()
-    }
-  }, [roomId, role, token])
-
-  // action callbacks send events via a separate socket ref held in the worker
-  ...
-}
+// Send to worker via port.postMessage(...)
+{ type: 'join'; backendUrl: string; roomId: string; role: string; token?: string }
+{ type: 'leave' }
+{ type: 'start-voting'; questions: Array<{ prompt: string; options: number[] }> }
+{ type: 'vote'; questionIndex: number; value: number }
+{ type: 'unvote'; questionIndex: number }
+{ type: 'end-voting' }
+{ type: 'revote' }
+{ type: 'reset' }
+{ type: 'force-leave' }   // facilitator explicit leave — closes room for all tabs
 ```
 
-`RoomPage` calls `useRoom`, passes `state` and the action functions into a `RoomContext`, and child components consume only what they need.
+#### Worker → Tab message types
+
+```ts
+// Received from worker via port.onmessage
+{ type: 'room:state'; payload: RoomStatePayload }
+{ type: 'stage:changed'; payload: StageChangedPayload }
+{ type: 'participant:joined'; payload: ParticipantView }
+{ type: 'participant:left'; payload: { name: string } }
+{ type: 'participant:voted'; payload: { name: string; voteCount: number } }
+{ type: 'results'; payload: ResultsPayload }
+{ type: 'force-leave' }   // navigate all facilitator tabs away
+{ type: 'room:closed' }   // show "session ended" modal
+{ type: 'connect_error'; message: string }
+{ type: 'error'; payload: { message: string } }
+```
 
 ### Derived values
 
@@ -278,11 +286,11 @@ Define responsive rules at the bottom of the relevant CSS Module file using `@me
 - Do not put socket event listeners directly in components — always via a custom hook.
 - Hooks may use other hooks.
 
-Key hooks to build:
+Key hooks:
 
 | Hook | Responsibility |
 |---|---|
-| `useRoom(roomId, role, token)` | Creates the socket with handshake auth, subscribes to all room events, tears down on unmount; returns `state`, `vote()`, `endVoting()`, `reset()` |
+| `useRoom(roomId, role, token)` | Creates the worker connection, subscribes to all room events, tears down on unmount; returns room state and action callbacks: `startVoting()`, `vote()`, `unvote()`, `endVoting()`, `revote()`, `reset()`, `forceLeave()` |
 
 ---
 

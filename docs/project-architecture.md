@@ -152,11 +152,15 @@ as `err.message`. Display it to the user.
 
 ### Client → Server events
 
-| Event | Payload | Description |
-|---|---|---|
-| `vote` | `{ value: number }` | Submit or change a vote; `value` must be an integer 1–5 |
-| `end-voting` | `{}` | Facilitator closes voting and moves to review stage |
-| `reset` | `{}` | Facilitator clears all votes and returns to voting stage |
+| Event | Payload | Who | Description |
+|---|---|---|---|
+| `start-voting` | `{ questions: Array<{ prompt: string; options: number[] }> }` | Facilitator | Moves from planning to voting; sets the questions |
+| `vote` | `{ questionIndex: number; value: number }` | Anyone | Submit a vote for one question; `value` must be in the question's `options` |
+| `unvote` | `{ questionIndex: number }` | Anyone | Withdraw a vote for one question |
+| `end-voting` | `{}` | Facilitator | Closes voting, calculates results, moves to review |
+| `revote` | `{}` | Facilitator | From review: clears votes, returns to voting with the same questions |
+| `reset` | `{}` | Facilitator | Clears questions and votes, returns to planning |
+| `close-room` | `{}` | Facilitator | Immediately closes the room for all participants (bypasses the reconnect grace period) |
 
 ---
 
@@ -165,13 +169,13 @@ as `err.message`. Display it to the user.
 | Event | Payload | Description |
 |---|---|---|
 | `room:state` | See below | Full room snapshot sent immediately on connect |
-| `participant:joined` | `{ name, role, hasVoted: false }` | Broadcast when a new socket connects to the room |
+| `participant:joined` | `{ name, role, voteCount: 0 }` | Broadcast when a new socket connects to the room |
 | `participant:left` | `{ name }` | Broadcast when a socket disconnects |
-| `participant:voted` | `{ name, hasVoted: true }` | Broadcast when a vote is submitted; the value is never revealed until review |
-| `stage:changed` | `{ stage: 'voting' \| 'review' }` | Broadcast when the facilitator advances or resets the stage |
-| `results` | `{ average: number \| null, count: number }` | Broadcast alongside `stage:changed` when voting ends |
-| `room:reset` | `{}` | Broadcast alongside `stage:changed` when the room resets |
-| `room:closed` | `{}` | Broadcast to all remaining sockets when the facilitator closes the room or the 2-hour expiry fires |
+| `participant:voted` | `{ name, voteCount: number }` | Broadcast on vote/unvote; `voteCount` is number of questions answered (value never revealed) |
+| `stage:changed` | `{ stage, questions? }` | Broadcast when stage changes; `questions` included when entering voting |
+| `results` | `{ questions: QuestionResult[] }` | Broadcast when voting ends |
+| `room:reset` | `{}` | Broadcast alongside `stage:changed` when room resets to planning |
+| `room:closed` | `{}` | Broadcast to all remaining sockets when the room is closed |
 | `error` | `{ message: string }` | Sent to a single socket when an action is rejected |
 
 The `room:state` payload shape:
@@ -182,9 +186,14 @@ The `room:state` payload shape:
   "myName": "gentle-otter",
   "myRole": "facilitator",
   "expiresAt": 1234567890000,
+  "questions": [
+    { "prompt": "Complexity", "options": [1, 2, 3, 5, 8] }
+  ],
+  "myVotes": [null],
+  "results": null,
   "participants": [
-    { "name": "gentle-otter", "role": "facilitator", "hasVoted": false },
-    { "name": "radiant-fox",  "role": "participant", "hasVoted": true  }
+    { "name": "gentle-otter", "role": "facilitator", "voteCount": 0 },
+    { "name": "radiant-fox",  "role": "participant", "voteCount": 1 }
   ]
 }
 ```
@@ -192,8 +201,15 @@ The `room:state` payload shape:
 `expiresAt` is a Unix millisecond timestamp. Use it to drive a client-side countdown
 timer — compute `expiresAt - Date.now()` each second and display the result.
 
-Vote values are never included in any server → client payload. `hasVoted` is the only
-vote-related field visible to other participants during voting.
+`myVotes` is an array indexed by question; each entry is the user's current vote value
+or `null` if not yet voted. Vote values are never included in payloads visible to other
+participants — `voteCount` (number of questions answered) is the only vote-related field
+shared during the voting stage.
+
+`results` is `null` except during the review stage, where it contains a `QuestionResult`
+per question (prompt, count, average, median, mode, breakdown).
+
+`questions` is an empty array during the planning stage.
 
 ---
 
@@ -243,5 +259,5 @@ landing page create action.
 
 - Persistent storage
 - Authentication
-- Custom vote scales
+- Facilitator transfer
 - Mobile-specific layout optimisation

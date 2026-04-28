@@ -215,6 +215,7 @@
   padding-bottom: 0.75rem;
   margin-bottom: 0.75rem;
   border-bottom: 1px solid var(--color-border);
+  text-align: center;
 }
 
 .timerLabel {
@@ -242,6 +243,14 @@
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
   margin: 0 0 0.75rem;
+  text-align: center;
+}
+
+.voteCount {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: -0.4rem 0 0.75rem;
+  text-align: center;
 }
 
 .participantList {
@@ -251,12 +260,36 @@
 }
 
 .participantItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.3rem 0;
   font-size: 0.875rem;
   color: var(--color-text);
-  white-space: nowrap;
+}
+
+.participantItem > span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.votedDot,
+.unvotedDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.votedDot {
+  background: var(--color-success);
+}
+
+.unvotedDot {
+  background: var(--color-text-muted);
+  opacity: 0.4;
 }
 
 .you {

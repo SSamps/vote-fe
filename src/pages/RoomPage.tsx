@@ -90,6 +90,10 @@ export default function RoomPage() {
         setParticipants((prev) => [...prev, msg.payload])
       } else if (msg.type === 'participant:left') {
         setParticipants((prev) => prev.filter((p) => p.name !== msg.payload.name))
+      } else if (msg.type === 'participant:voted') {
+        setParticipants((prev) =>
+          prev.map((p) => p.name === msg.payload.name ? { ...p, hasVoted: msg.payload.hasVoted } : p),
+        )
       } else if (msg.type === 'room:closed') {
         setRoomClosed(true)
       } else if (msg.type === 'connect_error') {
@@ -198,8 +202,13 @@ export default function RoomPage() {
               options={options}
               selected={myVote}
               onVote={(value) => {
-                setMyVote(value)
-                workerPortRef.current?.postMessage({ type: 'vote', value })
+                if (value === myVote) {
+                  setMyVote(null)
+                  workerPortRef.current?.postMessage({ type: 'unvote' })
+                } else {
+                  setMyVote(value)
+                  workerPortRef.current?.postMessage({ type: 'vote', value })
+                }
               }}
             />
           )}
@@ -244,11 +253,26 @@ export default function RoomPage() {
               </span>
             </div>
             <h2 className={styles.sidebarHeading}>Participants ({participants.length})</h2>
+            {stage === 'voting' && (() => {
+              const voted = participants.filter((p) => p.hasVoted).length
+              const pending = participants.length - voted
+              return (
+                <p className={styles.voteCount}>{voted} voted · {pending} remaining</p>
+              )
+            })()}
             <ul className={styles.participantList}>
               {participants.map((p) => (
                 <li key={p.name} className={styles.participantItem}>
-                  {p.name}
-                  {p.name === myName && <span className={styles.you}> (you)</span>}
+                  <span>
+                    {p.name}
+                    {p.name === myName && <span className={styles.you}> (you)</span>}
+                  </span>
+                  {stage === 'voting' && (
+                    <span
+                      className={p.hasVoted ? styles.votedDot : styles.unvotedDot}
+                      aria-label={p.hasVoted ? 'Voted' : 'Not yet voted'}
+                    />
+                  )}
                 </li>
               ))}
             </ul>

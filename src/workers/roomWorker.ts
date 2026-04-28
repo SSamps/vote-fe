@@ -68,6 +68,18 @@ self.onconnect = (event: MessageEvent) => {
         broadcast({ type: 'participant:left', payload })
       })
 
+      socket.on('participant:voted', (payload: { name: string; hasVoted: boolean }) => {
+        if (conn.lastState) {
+          conn.lastState = {
+            ...conn.lastState,
+            participants: conn.lastState.participants.map((p) =>
+              p.name === payload.name ? { ...p, hasVoted: payload.hasVoted } : p,
+            ),
+          }
+        }
+        broadcast({ type: 'participant:voted', payload })
+      })
+
       socket.on('room:closed', () => {
         broadcast({ type: 'room:closed' })
         conn.socket.disconnect()
@@ -96,6 +108,11 @@ self.onconnect = (event: MessageEvent) => {
     if (msg.type === 'vote') {
       const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
       if (conn) conn.socket.emit('vote', { value: msg.value })
+    }
+
+    if (msg.type === 'unvote') {
+      const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
+      if (conn) conn.socket.emit('unvote', {})
     }
 
     if (msg.type === 'leave') {

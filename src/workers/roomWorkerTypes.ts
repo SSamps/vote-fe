@@ -24,12 +24,14 @@ export type TabToWorkerMessage =
   | { type: 'end-voting' }
   | { type: 'reset' }
   | { type: 'vote'; value: number }
+  | { type: 'unvote' }
 
 export type WorkerToTabMessage =
   | { type: 'room:state'; payload: RoomStatePayload }
   | { type: 'stage:changed'; payload: { stage: Stage; prompt?: string; options?: number[] } }
   | { type: 'participant:joined'; payload: ParticipantView }
   | { type: 'participant:left'; payload: { name: string } }
+  | { type: 'participant:voted'; payload: { name: string; hasVoted: boolean } }
   | { type: 'room:closed' }
   | { type: 'connect_error'; message: string }
   | { type: 'error'; payload: { message: string } }

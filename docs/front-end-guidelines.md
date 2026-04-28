@@ -8,8 +8,8 @@ This document defines the conventions, technology choices, and patterns that gov
 
 | Concern | Choice | Rationale |
 |---|---|---|
-| UI framework | React 18 (functional components only) | Already chosen |
-| Build tool | Vite 5 | Already chosen |
+| UI framework | React 19 (functional components only) | Already chosen |
+| Build tool | Vite 8 | Already chosen |
 | Routing | React Router v6 | Lightweight, declarative, matches the two-route URL scheme |
 | Real-time | Socket.io-client | Matches the backend library; handles reconnection automatically |
 | Component library | **None** | The app's UI surface is small and well-defined; custom components keep the bundle lean and the design fully controlled |
@@ -52,7 +52,7 @@ A component that is only ever used in one place and is non-trivial can live in i
 ### TypeScript conventions
 
 - All component files use `.tsx`; all non-JSX files use `.ts`.
-- Run `npm run typecheck` (`tsc --noEmit`) to type-check without building.
+- Run `npm run typecheck` (`tsc -b`) to type-check without building.
 - Vite transpiles TypeScript at dev and build time; `tsc` is used only for type-checking.
 - Prefer explicit prop interfaces over inline types for anything non-trivial:
   ```tsx
@@ -117,14 +117,16 @@ useEffect(() => {
 
 The room session (participants, stage, votes, my identity) is shared across several components in `RoomPage`. Manage it with a single `useReducer` inside a `RoomContext`, exposed via a custom hook.
 
-```js
-// hooks/useRoom.js — owns all socket event handling for a session
-export function useRoom(roomId, role) {
+```ts
+// hooks/useRoom.ts — owns socket lifecycle and all room event handling
+export function useRoom(roomId: string, role: Role, token: string | null) {
   const [state, dispatch] = useReducer(roomReducer, initialState)
-  const socket = useSocket()
 
   useEffect(() => {
-    socket.emit('join', { roomId, role })
+    const socket = io(BACKEND_URL, {
+      auth: { roomId, role, token: token ?? undefined },
+    })
+
     socket.on('room:state', payload => dispatch({ type: 'ROOM_STATE', payload }))
     socket.on('participant:joined', payload => dispatch({ type: 'PARTICIPANT_JOINED', payload }))
     socket.on('participant:left', payload => dispatch({ type: 'PARTICIPANT_LEFT', payload }))
@@ -132,16 +134,28 @@ export function useRoom(roomId, role) {
     socket.on('stage:changed', payload => dispatch({ type: 'STAGE_CHANGED', payload }))
     socket.on('results', payload => dispatch({ type: 'RESULTS', payload }))
     socket.on('room:reset', () => dispatch({ type: 'ROOM_RESET' }))
-    return () => socket.removeAllListeners()
-  }, [socket, roomId, role])
+    socket.on('connect_error', err => dispatch({ type: 'CONNECTION_ERROR', message: err.message }))
 
-  const vote = useCallback(value => socket.emit('vote', { value }), [socket])
-  const endVoting = useCallback(() => socket.emit('end-voting', {}), [socket])
-  const reset = useCallback(() => socket.emit('reset', {}), [socket])
+    return () => {
+      socket.removeAllListeners()
+      socket.disconnect()
+    }
+  }, [roomId, role, token])
 
-  return { state, vote, endVoting, reset }
+  // action callbacks are derived from the socket ref — see implementation
+  ...
 }
 ```
+
+Key points:
+- Auth is passed in the `io()` handshake `auth` object, not via a `join` event. The
+  server validates the connection before it fires.
+- The socket is created inside the effect, not in a singleton. This ensures a fresh
+  connection each time a room is visited and a clean teardown when the component unmounts.
+- The cleanup **must** call both `removeAllListeners()` and `disconnect()`. Omitting
+  `disconnect()` leaves the WebSocket open after navigation.
+- `connect_error` carries the rejection message from the server's `io.use()` middleware
+  (e.g. "Room not found", "Invalid or expired facilitator token"). Display it to the user.
 
 `RoomPage` calls `useRoom`, passes `state` and the action functions into a `RoomContext`, and child components consume only what they need.
 
@@ -225,18 +239,13 @@ Key hooks to build:
 
 | Hook | Responsibility |
 |---|---|
-| `useSocket` | Creates/returns the singleton Socket.io client, handles connect/disconnect lifecycle |
-| `useRoom(roomId, role)` | Subscribes to all room events; returns `state`, `vote()`, `endVoting()`, `reset()` |
+| `useRoom(roomId, role, token)` | Creates the socket with handshake auth, subscribes to all room events, tears down on unmount; returns `state`, `vote()`, `endVoting()`, `reset()` |
 
 ---
 
 ## Utilities (`src/lib/`)
 
 Pure functions go in `src/lib/`. No React, no side effects.
-
-| File | Purpose |
-|---|---|
-| `socket.js` | Creates and exports the Socket.io singleton (called by `useSocket`) |
 
 ---
 

@@ -1,9 +1,10 @@
 import { useParams, useSearchParams } from 'react-router-dom'
 
 // Stub — room UI will be implemented once Socket.io integration is in place.
-// When joining as facilitator, retrieve the token from sessionStorage:
+// When joining, pass auth via the socket handshake options, not a 'join' event:
+//   io(BACKEND_URL, { auth: { roomId, role, token } })
+// For facilitators, retrieve the token from sessionStorage:
 //   const token = sessionStorage.getItem(`facilitator-token-${roomId}`)
-// Then pass it in the socket 'join' event: { roomId, role: 'facilitator', token }
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const [searchParams] = useSearchParams()

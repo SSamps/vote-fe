@@ -55,30 +55,47 @@
   cursor: default;
 }
 
+/* ── dot base (structure only) ── */
+
 .nodeDot {
   width: var(--node-size);
   height: var(--node-size);
   border-radius: 50%;
-  border: 2px solid var(--color-border);
-  background: var(--color-surface);
+  border: 2px solid;
   transition: background 0.1s, border-color 0.1s;
   box-sizing: border-box;
 }
 
-.node:hover:not(:disabled) .nodeDot {
-  border-color: var(--color-primary);
-  background: #f0f5ff;
+/* ── four explicit visual states, applied via JS ── */
+
+.nodeDotDefault {
+  background: var(--color-surface);
+  border-color: var(--color-border);
 }
 
-.nodeSelected .nodeDot {
+.nodeDotHovered {
+  background: #f0f5ff;
+  border-color: var(--color-primary);
+}
+
+.nodeDotSelected {
   background: var(--color-primary);
   border-color: var(--color-primary);
 }
 
-.node:disabled.nodeSelected .nodeDot {
+.nodeDotSelectedHovered {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+/* disabled selected shows muted fill regardless of hover state */
+.node:disabled .nodeDotSelected,
+.node:disabled .nodeDotSelectedHovered {
   background: var(--color-text-muted);
   border-color: var(--color-text-muted);
 }
+
+/* ── label ── */
 
 .nodeLabel {
   font-size: 0.875rem;

@@ -31,7 +31,7 @@ export interface RoomStatePayload {
   myVotes: (number | null)[]
   results: ResultsPayload | null
   myName: string
-  myRole: string
+  myRole: 'facilitator' | 'participant'
   participants: ParticipantView[]
   expiresAt: number
 }
@@ -39,6 +39,7 @@ export interface RoomStatePayload {
 export type TabToWorkerMessage =
   | { type: 'join'; backendUrl: string; roomId: string; role: string; token?: string }
   | { type: 'leave' }
+  | { type: 'sync' }
   | { type: 'start-voting'; questions: Array<{ prompt: string; options: number[] }> }
   | { type: 'end-voting' }
   | { type: 'revote' }

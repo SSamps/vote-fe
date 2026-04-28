@@ -56,20 +56,10 @@
   margin: 0 0 0.6rem;
 }
 
-.voteTypeOption {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
-  color: var(--color-text);
-  cursor: default;
-}
-
-.radio {
-  accent-color: var(--color-primary);
-  width: 1rem;
-  height: 1rem;
-  cursor: default;
+.optionError {
+  font-size: 0.8rem;
+  color: var(--color-error, #dc2626);
+  margin: 0.4rem 0 0;
 }
 
 .textarea {

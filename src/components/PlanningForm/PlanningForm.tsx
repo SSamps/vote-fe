@@ -40,8 +40,17 @@ function parseOptions(options: ScaleOption[]): number[] {
   return options.map((o) => parseFloat(o.value)).filter((v) => !isNaN(v))
 }
 
+function hasDuplicateOptions(q: QuestionDraft): boolean {
+  const parsed = parseOptions(q.options)
+  return new Set(parsed).size !== parsed.length
+}
+
 function isQuestionValid(q: QuestionDraft): boolean {
-  return q.prompt.trim().length > 0 && parseOptions(q.options).length >= 2
+  return (
+    q.prompt.trim().length > 0 &&
+    parseOptions(q.options).length >= 2 &&
+    !hasDuplicateOptions(q)
+  )
 }
 
 export default function PlanningForm({ initialQuestions, onStartVoting }: PlanningFormProps) {
@@ -101,7 +110,7 @@ export default function PlanningForm({ initialQuestions, onStartVoting }: Planni
     <div className={styles.card}>
       <div className={styles.headingRow}>
         <h2 className={styles.heading}>Set up the vote</h2>
-        {initialQuestions?.length && (
+        {(initialQuestions?.length ?? 0) > 0 && (
           <button
             className={styles.startOverButton}
             onClick={() => setQuestions([makeQuestion()])}
@@ -109,14 +118,6 @@ export default function PlanningForm({ initialQuestions, onStartVoting }: Planni
             Start over
           </button>
         )}
-      </div>
-
-      <div className={styles.field}>
-        <span className={styles.label}>Vote type</span>
-        <label className={styles.voteTypeOption}>
-          <input type="radio" checked onChange={() => {}} className={styles.radio} />
-          Sliding scale
-        </label>
       </div>
 
       {questions.map((q, qi) => (
@@ -177,6 +178,9 @@ export default function PlanningForm({ initialQuestions, onStartVoting }: Planni
             <button className={styles.addButton} onClick={() => addOption(q.id)}>
               + Add point
             </button>
+            {hasDuplicateOptions(q) && (
+              <p className={styles.optionError}>Scale points must be unique.</p>
+            )}
           </div>
         </div>
       ))}

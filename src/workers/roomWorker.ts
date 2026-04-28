@@ -150,6 +150,14 @@ self.onconnect = (event: MessageEvent) => {
       if (conn) conn.socket.emit('unvote', { questionIndex: msg.questionIndex })
     }
 
+    if (msg.type === 'sync') {
+      const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
+      if (conn?.lastState) {
+        const out: WorkerToTabMessage = { type: 'room:state', payload: conn.lastState }
+        port.postMessage(out)
+      }
+    }
+
     if (msg.type === 'leave') {
       removePort(connectedRoomId, port)
       connectedRoomId = null

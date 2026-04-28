@@ -29,13 +29,25 @@ Mantine, Chakra UI, and similar libraries are excellent choices for apps with la
 ```
 src/
   pages/              — One file per route; maps directly to React Router <Route> entries
+    LandingPage.tsx
+    RoomPage.tsx
   components/         — Reusable presentational components, each in its own sub-folder
-    VoteButton/
-      VoteButton.tsx
-      VoteButton.module.css
-  hooks/              — Custom React hooks; encapsulate socket logic and shared business rules
+    PlanningForm/
+      PlanningForm.tsx
+      PlanningForm.module.css
+    Sidebar/
+      Sidebar.tsx
+      Sidebar.module.css
+    VotingScale/
+      VotingScale.tsx
+      VotingScale.module.css
+  hooks/              — Custom React hooks
+    useRoom.ts        — Worker lifecycle, all room state, action callbacks
+  workers/            — SharedWorker and its message type definitions
+    roomWorker.ts
+    roomWorkerTypes.ts
   lib/                — Pure utility functions with no React dependency
-  types/              — Shared TypeScript types and interfaces
+  env.d.ts            — Window.env type augmentation
   vite-env.d.ts       — Vite environment variable type declarations
   index.css           — Global reset + CSS custom properties (design tokens)
   App.tsx             — Route definitions only
@@ -83,13 +95,15 @@ For anything beyond the simplest component, use a sub-folder:
 
 ```
 components/
-  VoteButton/
-    VoteButton.jsx
-    VoteButton.module.css
-  ParticipantList/
-    ParticipantList.jsx
-    ParticipantList.module.css
-    ParticipantItem.jsx          ← sub-component used only by ParticipantList
+  PlanningForm/
+    PlanningForm.tsx
+    PlanningForm.module.css
+  Sidebar/
+    Sidebar.tsx
+    Sidebar.module.css
+  VotingScale/
+    VotingScale.tsx
+    VotingScale.module.css
 ```
 
 ---
@@ -115,7 +129,7 @@ useEffect(() => {
 
 ### Shared room state
 
-The room session (participants, stage, votes, my identity) is shared across several components in `RoomPage`. Manage it with a single `useReducer` inside a `RoomContext`, exposed via a custom hook.
+The room session (participants, stage, votes, my identity) is managed by the `useRoom` hook (`src/hooks/useRoom.ts`). `RoomPage` calls the hook and receives all state and action callbacks directly — no Context or reducer is needed at this scale.
 
 #### Socket connection via SharedWorker
 
@@ -124,7 +138,7 @@ The socket connection is **not** opened directly in a component or hook. Instead
 `RoomPage` communicates with the worker through a `MessagePort`:
 
 ```ts
-// Inside a useEffect in RoomPage:
+// Inside useRoom.ts — RoomPage calls useRoom() and receives state + actions:
 const worker = new SharedWorker(
   new URL('../workers/roomWorker.ts', import.meta.url),
   { type: 'module' },
@@ -138,18 +152,13 @@ worker.port.onmessage = (e: MessageEvent<WorkerToTabMessage>) => {
     setStage(msg.payload.stage)
     setQuestions(msg.payload.questions)
     setMyVotes(msg.payload.myVotes)
-    setResults(msg.payload.results)
-    setParticipants(msg.payload.participants)
-    // ...
-  } else if (msg.type === 'stage:changed') {
-    setStage(msg.payload.stage)
-    if (msg.payload.stage === 'voting') {
-      setQuestions(msg.payload.questions ?? [])
-      setMyVotes((msg.payload.questions ?? []).map(() => null))
-      setParticipants((prev) => prev.map((p) => ({ ...p, voteCount: 0 })))
-    }
+    // ... etc.
+  } else if (msg.type === 'error') {
+    setError(msg.payload.message)
+    // re-sync votes in case an optimistic update is now wrong
+    port.postMessage({ type: 'sync' })
   } else if (msg.type === 'force-leave') {
-    navigate('/')
+    setForcedOut(true)  // RoomPage watches this and calls navigate('/')
   }
   // ... etc.
 }
@@ -173,11 +182,12 @@ Key points:
   waits 10 seconds before closing the room, giving the page time to reload and reconnect.
 - The facilitator token is read from `localStorage` (not `sessionStorage`) so it is
   available in all tabs.
-- `connect_error` and `error` messages from the worker carry rejection messages from the
-  server's `io.use()` middleware. Display them to the user.
-- `force-leave` is a special worker-to-tab message (not a socket event) broadcast to all
-  tabs when the facilitator explicitly closes the room via the Leave button. Each tab
-  navigates to the landing page on receipt.
+- `connect_error` and `error` messages from the worker surface rejected actions. On
+  receiving `error`, the hook sets an error string for the UI and sends `sync` back to the
+  worker to revert any optimistic state update.
+- `force-leave` is a worker-to-tab message (not a socket event) broadcast to all ports
+  when the facilitator explicitly closes the room via the Leave button. Each tab navigates
+  to the landing page on receipt.
 
 #### Tab → Worker message types
 
@@ -185,6 +195,7 @@ Key points:
 // Send to worker via port.postMessage(...)
 { type: 'join'; backendUrl: string; roomId: string; role: string; token?: string }
 { type: 'leave' }
+{ type: 'sync' }          // request worker to re-send lastState to this port (used on error)
 { type: 'start-voting'; questions: Array<{ prompt: string; options: number[] }> }
 { type: 'vote'; questionIndex: number; value: number }
 { type: 'unvote'; questionIndex: number }
@@ -290,7 +301,7 @@ Key hooks:
 
 | Hook | Responsibility |
 |---|---|
-| `useRoom(roomId, role, token)` | Creates the worker connection, subscribes to all room events, tears down on unmount; returns room state and action callbacks: `startVoting()`, `vote()`, `unvote()`, `endVoting()`, `revote()`, `reset()`, `forceLeave()` |
+| `useRoom(roomId, role, token)` | Creates the SharedWorker connection, subscribes to all room events, tears down on unmount; returns room state (`stage`, `questions`, `myVotes`, `results`, `participants`, `myName`, `expiresAt`, `roomClosed`, `forcedOut`, `error`) and action callbacks: `startVoting()`, `vote()`, `unvote()`, `endVoting()`, `revote()`, `reset()`, `forceLeave()`, `clearError()` |
 
 ---
 

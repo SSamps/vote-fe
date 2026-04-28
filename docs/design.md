@@ -53,15 +53,16 @@ For colours, spacing, typography, and component visual specifications, see [`vis
 
 ### Top bar
 
-- **Leave button** (top left): navigates the user away from the room. For participants it redirects immediately to the landing page. For the facilitator it shows a confirmation modal warning that leaving will close the room for everyone; confirming sends a `close-room` event and redirects all facilitator tabs simultaneously.
+- **Copy link button** (top left): copies the current room URL to the clipboard. Shows "Copied!" for two seconds to confirm.
 - **Room identity**: room ID and the user's assigned name and role.
 - **Stage indicator**: three labelled steps (Planning, Voting, Review) with the current step highlighted.
+- **Leave button** (top right): navigates the user away from the room. For participants it redirects immediately to the landing page. For the facilitator it shows a confirmation modal warning that leaving will close the room for everyone; confirming sends a `close-room` event and redirects all facilitator tabs simultaneously.
 
 ### Participant sidebar (right)
 
 - Collapsible — a toggle button at the top collapses it to a narrow strip and expands it again.
 - When expanded, shows at the top: a countdown timer displaying the time remaining before the room automatically closes (2 hours from creation).
-- Below the timer: every participant's name with a `(you)` tag on the current user.
+- Below the timer: every participant's name with a `(you)` tag on the current user. The facilitator is distinguished by a small **F** badge next to their name.
 - During the voting stage, shows a row of dots per participant indicating how many questions they have answered (filled dot = answered, empty dot = unanswered). Dots light up left-to-right regardless of which specific question was answered — they represent overall progress.
 - A summary line during voting: **X done · Y in progress · Z remaining** (done = all questions answered; in progress = at least one answered but not all; remaining = none answered).
 - Updates in real time as participants join or submit votes.
@@ -98,6 +99,7 @@ When the facilitator returns to planning from voting or review, the form is pre-
 - All questions are displayed simultaneously, stacked vertically.
 - Any participant (including the facilitator) can vote on any question.
 - Selecting a value on a question records that vote; selecting the same value again removes it (toggle). Selecting a different value changes the vote.
+- Each voting button has four explicit visual states: **default** (white, grey border), **hover** (light blue, blue border), **selected** (solid blue), **selected + hover** (darker blue) — so clicking always gives immediate visual feedback.
 - Votes are hidden from other participants during this stage — only the number of questions answered per participant is visible.
 - Facilitator actions: **End voting** (moves to review) and **Back to planning** (clears votes and returns to planning with the form pre-populated).
 
@@ -126,6 +128,12 @@ A room is closed when:
 - All participants leave while the facilitator is absent.
 
 When the room closes, all participants see a modal overlay: **"Session ended"** with a link back to the landing page. The modal cannot be dismissed — the room is gone.
+
+---
+
+## Error feedback
+
+If the server rejects an action (e.g. a vote submitted after the stage has changed), a dismissable error banner appears below the top bar. It auto-dismisses after 4 seconds. Connection errors from the socket are surfaced the same way.
 
 ---
 

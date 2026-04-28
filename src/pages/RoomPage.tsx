@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
-import type { ParticipantView, WorkerToTabMessage } from '../workers/roomWorkerTypes.js'
+import type { ParticipantView, WorkerToTabMessage, Stage } from '../workers/roomWorkerTypes.js'
+import PlanningForm from '../components/PlanningForm/PlanningForm.js'
 import styles from './RoomPage.module.css'
 
 const BACKEND_URL =
@@ -23,8 +24,10 @@ export default function RoomPage() {
   const token = roomId ? localStorage.getItem(`facilitator-token-${roomId}`) : null
   const role = token ? 'facilitator' : 'participant'
   const [status, setStatus] = useState<Status>('loading')
+  const [stage, setStage] = useState<Stage>('planning')
   const [participants, setParticipants] = useState<ParticipantView[]>([])
   const [myName, setMyName] = useState<string | null>(null)
+  const workerPortRef = useRef<MessagePort | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [roomClosed, setRoomClosed] = useState(false)
   const [expiresAt, setExpiresAt] = useState<number | null>(null)
@@ -58,14 +61,18 @@ export default function RoomPage() {
     )
 
     worker.port.start()
+    workerPortRef.current = worker.port
     worker.port.postMessage({ type: 'join', backendUrl: BACKEND_URL, roomId, role, token })
 
     worker.port.onmessage = (e: MessageEvent<WorkerToTabMessage>) => {
       const msg = e.data
       if (msg.type === 'room:state') {
+        setStage(msg.payload.stage)
         setMyName(msg.payload.myName)
         setParticipants(msg.payload.participants)
         setExpiresAt(msg.payload.expiresAt)
+      } else if (msg.type === 'stage:changed') {
+        setStage(msg.payload.stage)
       } else if (msg.type === 'participant:joined') {
         setParticipants((prev) => [...prev, msg.payload])
       } else if (msg.type === 'participant:left') {
@@ -80,6 +87,7 @@ export default function RoomPage() {
     }
 
     return () => {
+      workerPortRef.current = null
       worker.port.postMessage({ type: 'leave' })
       worker.port.close()
     }
@@ -142,17 +150,61 @@ export default function RoomPage() {
           </div>
         </div>
       )}
-      <main className={styles.mainContent}>
-        <div style={{ padding: '2rem' }}>
-          <h1>Room: {roomId}</h1>
-          <p>
-            You are: {myName ?? '…'} ({role})
-          </p>
-          <p style={{ color: '#666' }}>Room view coming soon.</p>
-        </div>
-      </main>
 
-      <aside className={`${styles.sidebar} ${sidebarOpen ? '' : styles.sidebarCollapsed}`}>
+      <header className={styles.topBar}>
+        <h1 className={styles.roomId}>
+          Room: {roomId}
+          <span className={styles.identity}> — {myName ?? '…'} ({role})</span>
+        </h1>
+        <div className={styles.stages}>
+          {(['planning', 'voting', 'review'] as Stage[]).map((s, i) => (
+            <span key={s} className={s === stage ? styles.stageActive : styles.stageInactive}>
+              {i > 0 && <span className={styles.stageSep}>›</span>}
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </span>
+          ))}
+        </div>
+      </header>
+
+      <div className={styles.roomBody}>
+        <main className={styles.mainContent}>
+          <div className={styles.mainCenter}>
+          {stage === 'planning' && role === 'facilitator' && <PlanningForm />}
+          {role === 'facilitator' && (
+            <div className={styles.facilitatorActions}>
+              {stage === 'planning' && (
+                <button
+                  className={styles.actionButton}
+                  onClick={() => workerPortRef.current?.postMessage({ type: 'start-voting' })}
+                >
+                  Start voting
+                </button>
+              )}
+              {stage === 'voting' && (
+                <button
+                  className={styles.actionButton}
+                  onClick={() => workerPortRef.current?.postMessage({ type: 'end-voting' })}
+                >
+                  End voting
+                </button>
+              )}
+              {stage === 'review' && (
+                <button
+                  className={`${styles.actionButton} ${styles.actionButtonSecondary}`}
+                  onClick={() => workerPortRef.current?.postMessage({ type: 'reset' })}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          )}
+          {stage === 'planning' && role === 'participant' && (
+            <p className={styles.muted}>Waiting for the facilitator to set up the vote…</p>
+          )}
+          </div>
+        </main>
+
+        <aside className={`${styles.sidebar} ${sidebarOpen ? '' : styles.sidebarCollapsed}`}>
         <button
           className={styles.sidebarToggle}
           onClick={() => setSidebarOpen((o) => !o)}
@@ -179,7 +231,8 @@ export default function RoomPage() {
             </ul>
           </div>
         )}
-      </aside>
+        </aside>
+      </div>
     </div>
   )
 }

@@ -61,7 +61,9 @@ For colours, spacing, typography, and component visual specifications, see [`vis
 
 ### Participant sidebar (right)
 
-- Lists every participant's name.
+- Collapsible — a toggle button at the top collapses it to a narrow strip and expands it again.
+- When expanded, shows at the top: a countdown timer displaying the time remaining before the room automatically closes (2 hours from creation).
+- Below the timer: every participant's name.
 - Shows a status indicator per participant: voted (✓) or not yet voted (–).
 - Updates in real time as participants join or submit votes.
 
@@ -100,18 +102,29 @@ Names are generated server-side on join using the pattern `<adjective>-<animal>`
 
 ---
 
+## Room closure
+
+A room is closed when:
+- The facilitator closes all their browser tabs for that room (or navigates away from the room page). A short grace period allows for page refreshes — the room only closes if the facilitator does not reconnect within ~10 seconds.
+- The 2-hour automatic expiry fires.
+
+When the room closes, all participants see a modal overlay: **"Session ended"** with a link back to the landing page. The modal cannot be dismissed — the room is gone.
+
+---
+
 ## Real-time updates
 
-The backend must push the following events to all connected clients:
+The backend pushes the following events to all connected clients:
 
 | Event | Payload |
 |---|---|
-| Participant joined | name, initial voted status |
+| Participant joined | name, role, initial voted status |
 | Participant left | name |
 | Participant voted | name, new voted status (not the vote value) |
 | Stage changed | new stage (`voting` \| `review`) |
 | Results published | average vote (and future stats) |
 | Room reset | clears results, returns to voting stage |
+| Room closed | (no payload) — triggers the session-ended modal |
 
 Implementation: WebSockets via Socket.io. See [`project-architecture.md`](project-architecture.md) for the full event contract.
 

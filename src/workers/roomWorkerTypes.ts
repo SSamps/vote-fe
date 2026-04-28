@@ -4,9 +4,11 @@ export interface ParticipantView {
   hasVoted: boolean
 }
 
+export type Stage = 'planning' | 'voting' | 'review'
+
 export interface RoomStatePayload {
   roomId: string
-  stage: string
+  stage: Stage
   myName: string
   myRole: string
   participants: ParticipantView[]
@@ -16,9 +18,13 @@ export interface RoomStatePayload {
 export type TabToWorkerMessage =
   | { type: 'join'; backendUrl: string; roomId: string; role: string; token?: string }
   | { type: 'leave' }
+  | { type: 'start-voting' }
+  | { type: 'end-voting' }
+  | { type: 'reset' }
 
 export type WorkerToTabMessage =
   | { type: 'room:state'; payload: RoomStatePayload }
+  | { type: 'stage:changed'; payload: { stage: Stage } }
   | { type: 'participant:joined'; payload: ParticipantView }
   | { type: 'participant:left'; payload: { name: string } }
   | { type: 'room:closed' }

@@ -3,6 +3,7 @@ import type {
   TabToWorkerMessage,
   WorkerToTabMessage,
   RoomStatePayload,
+  Stage,
 } from './roomWorkerTypes.js'
 
 declare const self: { onconnect: ((event: MessageEvent) => void) | null }
@@ -54,6 +55,11 @@ self.onconnect = (event: MessageEvent) => {
         broadcast({ type: 'room:state', payload })
       })
 
+      socket.on('stage:changed', (payload: { stage: Stage }) => {
+        if (conn.lastState) conn.lastState = { ...conn.lastState, stage: payload.stage }
+        broadcast({ type: 'stage:changed', payload })
+      })
+
       socket.on('participant:joined', (payload: RoomStatePayload['participants'][number]) => {
         broadcast({ type: 'participant:joined', payload })
       })
@@ -75,6 +81,11 @@ self.onconnect = (event: MessageEvent) => {
       socket.on('error', (payload: { message: string }) => {
         broadcast({ type: 'error', payload })
       })
+    }
+
+    if (msg.type === 'start-voting' || msg.type === 'end-voting' || msg.type === 'reset') {
+      const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
+      if (conn) conn.socket.emit(msg.type, {})
     }
 
     if (msg.type === 'leave') {

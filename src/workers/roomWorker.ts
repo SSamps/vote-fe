@@ -62,6 +62,12 @@ self.onconnect = (event: MessageEvent) => {
         broadcast({ type: 'participant:left', payload })
       })
 
+      socket.on('room:closed', () => {
+        broadcast({ type: 'room:closed' })
+        conn.socket.disconnect()
+        rooms.delete(roomId)
+      })
+
       socket.on('connect_error', (err: Error) => {
         broadcast({ type: 'connect_error', message: err.message })
       })

@@ -48,6 +48,18 @@
   font-size: 0.95rem;
 }
 
+/* ── modal overlay ── */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
 /* ── room layout (found state) ── */
 
 .roomLayout {
@@ -101,6 +113,30 @@
   flex: 1;
   overflow-y: auto;
   padding: 1rem 0.75rem;
+}
+
+.timer {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.timerLabel {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.15rem;
+}
+
+.timerValue {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .sidebarHeading {

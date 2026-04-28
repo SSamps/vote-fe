@@ -10,6 +10,7 @@ export interface RoomStatePayload {
   myName: string
   myRole: string
   participants: ParticipantView[]
+  expiresAt: number
 }
 
 export type TabToWorkerMessage =
@@ -20,5 +21,6 @@ export type WorkerToTabMessage =
   | { type: 'room:state'; payload: RoomStatePayload }
   | { type: 'participant:joined'; payload: ParticipantView }
   | { type: 'participant:left'; payload: { name: string } }
+  | { type: 'room:closed' }
   | { type: 'connect_error'; message: string }
   | { type: 'error'; payload: { message: string } }

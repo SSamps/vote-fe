@@ -9,6 +9,15 @@ const BACKEND_URL =
 
 type Status = 'loading' | 'found' | 'not-found' | 'error'
 
+function formatTimeLeft(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000)
+  const h = Math.floor(totalSeconds / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  const s = totalSeconds % 60
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const token = roomId ? localStorage.getItem(`facilitator-token-${roomId}`) : null
@@ -17,6 +26,9 @@ export default function RoomPage() {
   const [participants, setParticipants] = useState<ParticipantView[]>([])
   const [myName, setMyName] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [roomClosed, setRoomClosed] = useState(false)
+  const [expiresAt, setExpiresAt] = useState<number | null>(null)
+  const [timeLeft, setTimeLeft] = useState(0)
 
   useEffect(() => {
     if (!roomId) {
@@ -53,10 +65,13 @@ export default function RoomPage() {
       if (msg.type === 'room:state') {
         setMyName(msg.payload.myName)
         setParticipants(msg.payload.participants)
+        setExpiresAt(msg.payload.expiresAt)
       } else if (msg.type === 'participant:joined') {
         setParticipants((prev) => [...prev, msg.payload])
       } else if (msg.type === 'participant:left') {
         setParticipants((prev) => prev.filter((p) => p.name !== msg.payload.name))
+      } else if (msg.type === 'room:closed') {
+        setRoomClosed(true)
       } else if (msg.type === 'connect_error') {
         console.error('Socket connection error:', msg.message)
       } else if (msg.type === 'error') {
@@ -69,6 +84,14 @@ export default function RoomPage() {
       worker.port.close()
     }
   }, [status, roomId, role, token])
+
+  useEffect(() => {
+    if (expiresAt === null) return
+    const tick = () => setTimeLeft(Math.max(0, expiresAt - Date.now()))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [expiresAt])
 
   if (status === 'loading') {
     return (
@@ -108,6 +131,17 @@ export default function RoomPage() {
 
   return (
     <div className={styles.roomLayout}>
+      {roomClosed && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.card}>
+            <h2 className={styles.heading}>Session ended</h2>
+            <p className={styles.body}>The facilitator has closed the room.</p>
+            <Link to="/" className={styles.link}>
+              Back to home
+            </Link>
+          </div>
+        </div>
+      )}
       <main className={styles.mainContent}>
         <div style={{ padding: '2rem' }}>
           <h1>Room: {roomId}</h1>
@@ -128,6 +162,12 @@ export default function RoomPage() {
         </button>
         {sidebarOpen && (
           <div className={styles.sidebarContent}>
+            <div className={styles.timer}>
+              <span className={styles.timerLabel}>Closes in</span>
+              <span className={styles.timerValue}>
+                {expiresAt !== null ? formatTimeLeft(timeLeft) : '—'}
+              </span>
+            </div>
             <h2 className={styles.sidebarHeading}>Participants ({participants.length})</h2>
             <ul className={styles.participantList}>
               {participants.map((p) => (

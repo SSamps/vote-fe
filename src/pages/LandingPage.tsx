@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 
 import styles from './LandingPage.module.css'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000'
+const BACKEND_URL =
+  window.env?.VITE_BACKEND_URL ?? import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000'
 
 function extractRoomCode(input: string): string {
   const trimmed = input.trim()
@@ -54,10 +55,8 @@ export default function LandingPage() {
       }
       if (!res.ok) throw new Error(`Unexpected status ${res.status}`)
       navigate(`/room/${code}`)
-    } catch (err) {
-      if (err instanceof Error && !err.message.startsWith('Unexpected')) {
-        setError('Could not reach the server. Is the backend running?')
-      }
+    } catch {
+      setError('Could not reach the server. Is the backend running?')
     } finally {
       setJoining(false)
     }

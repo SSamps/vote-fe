@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-`vote` is the frontend SPA for a voting application, built with React and Vite. It runs entirely in Docker — there is no expectation of running the app directly on the host. A separate backend service (not in this repo) will be integrated later.
+`vote` is the frontend SPA for a voting application, built with React 19 and Vite 8. It runs entirely in Docker — there is no expectation of running the app directly on the host.
+
+## Documentation
+
+See [`docs/documentation-overview.md`](docs/documentation-overview.md) for a description of every document in `docs/`. Read the relevant documents before making changes.
 
 ## Development workflow
 
@@ -15,13 +19,13 @@ All local development runs inside Docker containers. `npm run` scripts are the e
 npm run dev
 ```
 App is served by the Vite dev server with HMR at `http://localhost:5173`.  
-Source files (`src/`, `index.html`, `vite.config.js`) are volume-mounted into the container, so edits take effect immediately without a container rebuild.
+Source files (`src/`, `index.html`, `vite.config.ts`) are volume-mounted into the container, so edits take effect immediately without a container rebuild.
 
-**Preview production build** (builds the prod image and serves it via nginx):
+**Preview production build** (builds the prod image and serves it via Node.js):
 ```bash
 npm run preview
 ```
-Served at `http://localhost:8080`.
+Served at `http://localhost:8080`. Requires a `.env.dev` file (see below).
 
 **Build the prod image and push to registry:**
 ```bash
@@ -36,23 +40,17 @@ Two Dockerfiles, two use cases:
 | File | Used by | Base | Serves |
 |---|---|---|---|
 | `docker/dev/Dockerfile` | `npm run dev` | `node:22-alpine` | Vite dev server (port 5173) |
-| `Dockerfile` | `npm run preview` / `npm run prod` | `node:22-alpine` → `nginx:stable-alpine` | Static build via nginx (port 80) |
+| `Dockerfile` | `npm run preview` / `npm run prod` | `node:22-alpine` (builder) → `node:22-alpine` (runtime) | Compiled SPA via Express server (port 8080) |
 
-The prod Dockerfile is a two-stage build — the final image contains only the compiled static files and nginx, no Node.js runtime.
+The prod Dockerfile is a two-stage build — builder compiles the Vite app and bundles `server.ts` with esbuild; runtime stage contains only `dist/` and `server.cjs`.
+
+**Environment variables for preview:** Create a `.env` file or pass directly to `docker run`. The preview run command does not currently pass an env file — add `--env-file .env.preview` to `preview:dockerRunContainer` if needed. Required variables:
+```
+VITE_BACKEND_URL=http://localhost:3000
+```
 
 **WSL2 note:** `~/.docker/config.json` must not contain `"credsStore": "desktop.exe"` — Docker Desktop writes this but it breaks builds inside WSL. The file should be `{}`.
 
 ## Architecture
 
-React SPA with React Router v6. Entry point: `index.html` → `src/main.jsx` → `src/App.jsx` (route definitions) → `src/pages/` (route-level components). See the docs below for full detail.
-
-## Documentation
-
-The `docs/` directory contains the full product and technical design for the application. **Read all four documents before making changes.**
-
-| Document | Purpose |
-|---|---|
-| [`docs/design.md`](docs/design.md) | Product design: user roles, user flows, room UI behaviour, facilitator workflow, participant naming, real-time event model |
-| [`docs/project-architecture.md`](docs/project-architecture.md) | Technical architecture: technology choices, server-side state model, connection lifecycle, REST endpoints, Socket.io event contracts, environment variables |
-| [`docs/front-end-guidelines.md`](docs/front-end-guidelines.md) | Front-end conventions: project structure, component patterns, state management approach, styling rules, what to avoid |
-| [`docs/visual-design.md`](docs/visual-design.md) | Visual language: colour palette (CSS custom properties), typography, spacing, button/component specs, layout dimensions |
+React 19 SPA with React Router v7. Entry point: `index.html` → `src/main.tsx` → `src/App.tsx` (route definitions) → `src/pages/` (route-level components).

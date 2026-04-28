@@ -8,10 +8,13 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:stable-alpine AS runner
+FROM node:22-alpine AS runner
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-EXPOSE 80
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server.cjs ./server.cjs
 
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 8080
+
+CMD ["node", "server.cjs"]

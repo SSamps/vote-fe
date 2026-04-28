@@ -322,6 +322,58 @@ Within each file, order imports as:
 
 ---
 
+## Testing
+
+### Stack
+
+| Tool | Role |
+|---|---|
+| **Vitest** | Test runner — zero-config with Vite, same transform pipeline |
+| **@testing-library/react** | Renders components into a jsdom environment |
+| **@testing-library/user-event** | Simulates real user interactions (click, type) |
+| **@testing-library/jest-dom** | Extra matchers: `toBeInTheDocument`, `toBeDisabled`, etc. |
+
+Run with `npm test` (once) or `npm run test:watch` (on file changes). Tests run on the
+host, not inside Docker.
+
+### What to test
+
+- **UI components** — rendering, user interactions, ARIA attributes.
+  Co-locate the test file with the component: `VotingScale/VotingScale.test.tsx`.
+- **Pure utility functions** in `src/lib/` — straightforward input/output assertions.
+
+### What not to test
+
+- **`useRoom` and the SharedWorker** — the worker runs in a browser context that jsdom
+  cannot replicate. Test the UI components that consume `useRoom`'s output instead.
+- **CSS class names** — prefer semantic queries (`getByRole`, `getByText`, `getByLabelText`)
+  over class-name assertions. CSS Modules hash class names, making them unstable.
+
+### Key patterns
+
+```tsx
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+
+it('fires onVote with the clicked value', async () => {
+  const onVote = vi.fn()               // mock function that records calls
+  render(<VotingScale ... onVote={onVote} />)
+
+  await userEvent.click(screen.getByRole('button', { name: 'Vote 3' }))
+
+  expect(onVote).toHaveBeenCalledWith(3)
+})
+```
+
+- Use `screen.getByRole` / `getByText` / `getByLabelText` to find elements — these
+  match how assistive technology sees the page.
+- Use `screen.queryBy*` (returns `null` rather than throwing) when asserting absence.
+- `vi.fn()` creates a mock function. Check calls with `toHaveBeenCalledWith`.
+- DOM cleanup between tests is handled automatically by `src/test/setup.ts`.
+
+---
+
 ## What to avoid
 
 - Class components

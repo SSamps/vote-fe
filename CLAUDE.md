@@ -14,6 +14,15 @@ See [`docs/documentation-overview.md`](docs/documentation-overview.md) for a des
 
 All local development runs inside Docker containers. `npm run` scripts are the entry point for every workflow — do not run `vite` or `docker` commands manually unless debugging a specific script.
 
+**Run tests** (runs on the host, not inside Docker — requires local `node_modules`):
+```bash
+npm test              # run all tests once
+npm run test:watch    # re-run on file changes
+```
+
+Tests use **Vitest** + **React Testing Library**. Three test files cover the key
+components — see `src/components/*/  *.test.tsx`.
+
 **Start dev environment** (watches config files and auto-rebuilds the container on changes):
 ```bash
 npm run dev

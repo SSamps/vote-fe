@@ -39,81 +39,127 @@ For colours, spacing, typography, and component visual specifications, see [`vis
 ### Layout
 
 ```
-┌──────────────────────────────────────────┬───────────────────┐
-│  [Facilitator controls — top bar]        │                   │
-│                                          │  Participants     │
-│                                          │  ─────────────    │
-│   Voting options (1 – 5)                 │  gentle-otter ✓   │
-│                                          │  radiant-fox  –   │
-│   [ 1 ]  [ 2 ]  [ 3 ]  [ 4 ]  [ 5 ]     │  brave-heron  ✓   │
-│                                          │                   │
-│                                          │                   │
-│  [Your name: gentle-otter — top right]   │                   │
-└──────────────────────────────────────────┴───────────────────┘
+┌─────────────────────────────────────────┬──────────────────────┐
+│  [Leave]  Room: abc123 — gentle-otter   │  ›                   │
+│           Planning › Voting › Review    │  Closes in  1:52:33  │
+│─────────────────────────────────────────│                       │
+│                                         │  Participants (3)    │
+│   [Planning / Voting / Review content]  │  ─────────────────   │
+│                                         │  gentle-otter (you)  │
+│                                         │  radiant-fox  ●●○    │
+│                                         │  brave-heron  ●○○    │
+└─────────────────────────────────────────┴──────────────────────┘
 ```
 
-### Voting area (all participants, including facilitator)
+### Top bar
 
-- Five buttons labelled **1** through **5**.
-- Buttons are unselected on entry.
-- Selecting a button ticks it; selecting a different button moves the tick (single-select only).
-- The participant's current selection is visible only to themselves until results are revealed.
+- **Copy link button** (top left): copies the current room URL to the clipboard. Shows "Copied!" for two seconds to confirm.
+- **Room identity**: room ID and the user's assigned name and role.
+- **Stage indicator**: three labelled steps (Planning, Voting, Review) with the current step highlighted.
+- **Leave button** (top right): navigates the user away from the room. For participants it redirects immediately to the landing page. For the facilitator it shows a confirmation modal warning that leaving will close the room for everyone; confirming sends a `close-room` event and redirects all facilitator tabs simultaneously.
 
 ### Participant sidebar (right)
 
-- Lists every participant's name.
-- Shows a status indicator per participant: voted (✓) or not yet voted (–).
+- Collapsible — a toggle button at the top collapses it to a narrow strip and expands it again.
+- When expanded, shows at the top: a countdown timer displaying the time remaining before the room automatically closes (2 hours from creation).
+- Below the timer: every participant's name with a `(you)` tag on the current user. The facilitator is distinguished by a small **F** badge next to their name.
+- During the voting stage, shows a row of dots per participant indicating how many questions they have answered (filled dot = answered, empty dot = unanswered). Dots light up left-to-right regardless of which specific question was answered — they represent overall progress.
+- A summary line during voting: **X done · Y in progress · Z remaining** (done = all questions answered; in progress = at least one answered but not all; remaining = none answered).
 - Updates in real time as participants join or submit votes.
 
-### Participant identity (top right)
+---
 
-- Each participant sees their own assigned name in the top-right corner of the screen.
+## Workflow stages
+
+The room moves through three stages, controlled by the facilitator.
+
+```
+Planning  →  (facilitator starts voting)  →  Voting  →  (facilitator ends voting)  →  Review
+                                              ↑                                           │
+                  (facilitator resets)        └─────── (facilitator votes again) ─────────┘
+                         │
+                  back to Planning
+```
+
+### Planning stage
+
+The facilitator sees a form to set up the vote:
+
+- **One or more questions**, each with a text prompt and a set of numeric scale options.
+- Questions can be added or removed. At least one question is required.
+- **Start over** button clears the form completely (shown only when the form is pre-populated from a previous session).
+- Pressing **Start voting** sends all questions to the server and moves the room to the voting stage.
+
+Participants see a waiting message while the facilitator is in planning.
+
+When the facilitator returns to planning from voting or review, the form is pre-populated with the previous questions so they can make minor adjustments and start a new round without re-entering everything.
+
+### Voting stage
+
+- All questions are displayed simultaneously, stacked vertically.
+- Any participant (including the facilitator) can vote on any question.
+- Selecting a value on a question records that vote; selecting the same value again removes it (toggle). Selecting a different value changes the vote.
+- Each voting button has four explicit visual states: **default** (white, grey border), **hover** (light blue, blue border), **selected** (solid blue), **selected + hover** (darker blue) — so clicking always gives immediate visual feedback.
+- Votes are hidden from other participants during this stage — only the number of questions answered per participant is visible.
+- Facilitator actions: **End voting** (moves to review) and **Back to planning** (clears votes and returns to planning with the form pre-populated).
+
+### Review stage
+
+- Voting is closed for all participants.
+- Results are revealed per question:
+  - **Average** (mean, rounded to 1 d.p.) shown prominently.
+  - Vote count.
+  - A collapsible **Details** panel showing:
+    - A horizontal bar chart with the vote count for every configured option (including zero-vote options).
+    - **Mean**, **Median**, **Mode** statistics.
+- Facilitator actions:
+  - **Vote again** — clears all votes, keeps the same questions, returns to the voting stage. Useful for re-running a round (e.g. planning poker re-estimation after discussion).
+  - **Reset** — clears votes and questions, returns to planning with the form pre-populated.
 
 ---
 
-## Facilitator controls
+## Room closure
 
-The facilitator sees an additional control bar at the top of the room. It exposes the current workflow stage and the action to advance it.
+A room is closed when:
 
-### Workflow stages
+- The facilitator explicitly presses **Leave & close room** in the confirmation modal. This closes the room immediately for all participants with no grace period, and navigates all facilitator tabs to the landing page simultaneously.
+- The facilitator closes all their browser tabs or navigates away without using the Leave button. A short grace period (10 seconds) allows for page refreshes — the room only closes if the facilitator does not reconnect within that window.
+- The 2-hour automatic expiry fires.
+- All participants leave while the facilitator is absent.
 
-```
-Voting  →  (facilitator presses "End voting")  →  Review  →  (facilitator presses "Reset")  →  Voting
-```
-
-#### Voting stage
-- All participants (including the facilitator) can submit or change their vote.
-- The facilitator sees a button: **End voting**.
-
-#### Review stage
-- Voting immediately closes for all participants when the facilitator ends the voting stage.
-- Results are revealed to everyone:
-  - **Average vote** (mean of all submitted values).
-  - *(Future: additional stats and visualisations — e.g. distribution chart, median, mode.)*
-- The facilitator sees a button: **Reset** — this clears all votes and returns the room to the Voting stage for a fresh round on a new prompt.
+When the room closes, all participants see a modal overlay: **"Session ended"** with a link back to the landing page. The modal cannot be dismissed — the room is gone.
 
 ---
 
-## Participant names
+## Error feedback
 
-Names are generated server-side on join using the pattern `<adjective>-<animal>`. Adjectives should be warm and positive (e.g. *gentle*, *radiant*, *brave*, *kind*, *vivid*). The word list lives in the backend. Names are unique within a room for the duration of the session but are not persisted.
+If the server rejects an action (e.g. a vote submitted after the stage has changed), a dismissable error banner appears below the top bar. It auto-dismisses after 4 seconds. Connection errors from the socket are surfaced the same way.
 
 ---
 
 ## Real-time updates
 
-The backend must push the following events to all connected clients:
+The backend pushes the following events to all connected clients:
 
-| Event | Payload |
-|---|---|
-| Participant joined | name, initial voted status |
-| Participant left | name |
-| Participant voted | name, new voted status (not the vote value) |
-| Stage changed | new stage (`voting` \| `review`) |
-| Results published | average vote (and future stats) |
-| Room reset | clears results, returns to voting stage |
+| Event | Payload | Description |
+|---|---|---|
+| `participant:joined` | `{ name, role, voteCount: 0 }` | New participant connected |
+| `participant:left` | `{ name }` | Participant disconnected |
+| `participant:voted` | `{ name, voteCount }` | Vote submitted or withdrawn; `voteCount` is number of questions answered (value never revealed) |
+| `stage:changed` | `{ stage, questions? }` | Stage advanced; `questions` included when entering voting |
+| `results` | `{ questions: QuestionResult[] }` | Broadcast alongside `stage:changed` when voting ends |
+| `room:reset` | `{}` | Broadcast alongside `stage:changed` when room resets to planning |
+| `room:closed` | `{}` | Room closed — triggers the session-ended modal |
 
 Implementation: WebSockets via Socket.io. See [`project-architecture.md`](project-architecture.md) for the full event contract.
+
+---
+
+## Participant names
+
+Names are generated server-side on join using the pattern `<adjective>-<animal>`. Adjectives are warm and positive (e.g. *gentle*, *radiant*, *brave*, *kind*, *vivid*). The word list lives in the backend. Names are unique within a room for the duration of the session but are not persisted.
+
+The facilitator's name is preserved across page refreshes — if they reconnect within the 10-second grace period, their previous name is reused.
 
 ---
 
@@ -122,6 +168,4 @@ Implementation: WebSockets via Socket.io. See [`project-architecture.md`](projec
 - Persistent storage / session history
 - Authentication or accounts
 - Facilitator transfer
-- More than one active vote per room
-- Custom vote scales (only 1–5 for now)
 - Mobile-specific layout optimisation

@@ -29,13 +29,25 @@ Mantine, Chakra UI, and similar libraries are excellent choices for apps with la
 ```
 src/
   pages/              — One file per route; maps directly to React Router <Route> entries
+    LandingPage.tsx
+    RoomPage.tsx
   components/         — Reusable presentational components, each in its own sub-folder
-    VoteButton/
-      VoteButton.tsx
-      VoteButton.module.css
-  hooks/              — Custom React hooks; encapsulate socket logic and shared business rules
+    PlanningForm/
+      PlanningForm.tsx
+      PlanningForm.module.css
+    Sidebar/
+      Sidebar.tsx
+      Sidebar.module.css
+    VotingScale/
+      VotingScale.tsx
+      VotingScale.module.css
+  hooks/              — Custom React hooks
+    useRoom.ts        — Worker lifecycle, all room state, action callbacks
+  workers/            — SharedWorker and its message type definitions
+    roomWorker.ts
+    roomWorkerTypes.ts
   lib/                — Pure utility functions with no React dependency
-  types/              — Shared TypeScript types and interfaces
+  env.d.ts            — Window.env type augmentation
   vite-env.d.ts       — Vite environment variable type declarations
   index.css           — Global reset + CSS custom properties (design tokens)
   App.tsx             — Route definitions only
@@ -83,13 +95,15 @@ For anything beyond the simplest component, use a sub-folder:
 
 ```
 components/
-  VoteButton/
-    VoteButton.jsx
-    VoteButton.module.css
-  ParticipantList/
-    ParticipantList.jsx
-    ParticipantList.module.css
-    ParticipantItem.jsx          ← sub-component used only by ParticipantList
+  PlanningForm/
+    PlanningForm.tsx
+    PlanningForm.module.css
+  Sidebar/
+    Sidebar.tsx
+    Sidebar.module.css
+  VotingScale/
+    VotingScale.tsx
+    VotingScale.module.css
 ```
 
 ---
@@ -115,49 +129,97 @@ useEffect(() => {
 
 ### Shared room state
 
-The room session (participants, stage, votes, my identity) is shared across several components in `RoomPage`. Manage it with a single `useReducer` inside a `RoomContext`, exposed via a custom hook.
+The room session (participants, stage, votes, my identity) is managed by the `useRoom` hook (`src/hooks/useRoom.ts`). `RoomPage` calls the hook and receives all state and action callbacks directly — no Context or reducer is needed at this scale.
+
+#### Socket connection via SharedWorker
+
+The socket connection is **not** opened directly in a component or hook. Instead, it lives in a `SharedWorker` (`src/workers/roomWorker.ts`) so that all browser tabs open on the same room share one socket. A user who opens the room in multiple tabs appears as a single participant and keeps a consistent identity.
+
+`RoomPage` communicates with the worker through a `MessagePort`:
 
 ```ts
-// hooks/useRoom.ts — owns socket lifecycle and all room event handling
-export function useRoom(roomId: string, role: Role, token: string | null) {
-  const [state, dispatch] = useReducer(roomReducer, initialState)
+// Inside useRoom.ts — RoomPage calls useRoom() and receives state + actions:
+const worker = new SharedWorker(
+  new URL('../workers/roomWorker.ts', import.meta.url),
+  { type: 'module' },
+)
+worker.port.start()
+worker.port.postMessage({ type: 'join', backendUrl: BACKEND_URL, roomId, role, token })
 
-  useEffect(() => {
-    const socket = io(BACKEND_URL, {
-      auth: { roomId, role, token: token ?? undefined },
-    })
+worker.port.onmessage = (e: MessageEvent<WorkerToTabMessage>) => {
+  const msg = e.data
+  if (msg.type === 'room:state') {
+    setStage(msg.payload.stage)
+    setQuestions(msg.payload.questions)
+    setMyVotes(msg.payload.myVotes)
+    // ... etc.
+  } else if (msg.type === 'error') {
+    setError(msg.payload.message)
+    // re-sync votes in case an optimistic update is now wrong
+    port.postMessage({ type: 'sync' })
+  } else if (msg.type === 'force-leave') {
+    setForcedOut(true)  // RoomPage watches this and calls navigate('/')
+  }
+  // ... etc.
+}
 
-    socket.on('room:state', payload => dispatch({ type: 'ROOM_STATE', payload }))
-    socket.on('participant:joined', payload => dispatch({ type: 'PARTICIPANT_JOINED', payload }))
-    socket.on('participant:left', payload => dispatch({ type: 'PARTICIPANT_LEFT', payload }))
-    socket.on('participant:voted', payload => dispatch({ type: 'PARTICIPANT_VOTED', payload }))
-    socket.on('stage:changed', payload => dispatch({ type: 'STAGE_CHANGED', payload }))
-    socket.on('results', payload => dispatch({ type: 'RESULTS', payload }))
-    socket.on('room:reset', () => dispatch({ type: 'ROOM_RESET' }))
-    socket.on('connect_error', err => dispatch({ type: 'CONNECTION_ERROR', message: err.message }))
-
-    return () => {
-      socket.removeAllListeners()
-      socket.disconnect()
-    }
-  }, [roomId, role, token])
-
-  // action callbacks are derived from the socket ref — see implementation
-  ...
+// Cleanup on unmount
+return () => {
+  worker.port.postMessage({ type: 'leave' })
+  worker.port.close()
 }
 ```
 
-Key points:
-- Auth is passed in the `io()` handshake `auth` object, not via a `join` event. The
-  server validates the connection before it fires.
-- The socket is created inside the effect, not in a singleton. This ensures a fresh
-  connection each time a room is visited and a clean teardown when the component unmounts.
-- The cleanup **must** call both `removeAllListeners()` and `disconnect()`. Omitting
-  `disconnect()` leaves the WebSocket open after navigation.
-- `connect_error` carries the rejection message from the server's `io.use()` middleware
-  (e.g. "Room not found", "Invalid or expired facilitator token"). Display it to the user.
+Message types (`TabToWorkerMessage`, `WorkerToTabMessage`) are defined in
+`src/workers/roomWorkerTypes.ts`. Always import from there rather than redefining them.
 
-`RoomPage` calls `useRoom`, passes `state` and the action functions into a `RoomContext`, and child components consume only what they need.
+Key points:
+- Send `{ type: 'join', ... }` once on mount; the worker opens the socket or reuses an
+  existing one if another tab already has the room open.
+- Send `{ type: 'leave' }` in the cleanup function so the worker can reference-count
+  ports and disconnect the socket when the last tab leaves.
+- The worker itself handles reconnect grace: if the facilitator refreshes, the server
+  waits 10 seconds before closing the room, giving the page time to reload and reconnect.
+- The facilitator token is read from `localStorage` (not `sessionStorage`) so it is
+  available in all tabs.
+- `connect_error` and `error` messages from the worker surface rejected actions. On
+  receiving `error`, the hook sets an error string for the UI and sends `sync` back to the
+  worker to revert any optimistic state update.
+- `force-leave` is a worker-to-tab message (not a socket event) broadcast to all ports
+  when the facilitator explicitly closes the room via the Leave button. Each tab navigates
+  to the landing page on receipt.
+
+#### Tab → Worker message types
+
+```ts
+// Send to worker via port.postMessage(...)
+{ type: 'join'; backendUrl: string; roomId: string; role: string; token?: string }
+{ type: 'leave' }
+{ type: 'sync' }          // request worker to re-send lastState to this port (used on error)
+{ type: 'start-voting'; questions: Array<{ prompt: string; options: number[] }> }
+{ type: 'vote'; questionIndex: number; value: number }
+{ type: 'unvote'; questionIndex: number }
+{ type: 'end-voting' }
+{ type: 'revote' }
+{ type: 'reset' }
+{ type: 'force-leave' }   // facilitator explicit leave — closes room for all tabs
+```
+
+#### Worker → Tab message types
+
+```ts
+// Received from worker via port.onmessage
+{ type: 'room:state'; payload: RoomStatePayload }
+{ type: 'stage:changed'; payload: StageChangedPayload }
+{ type: 'participant:joined'; payload: ParticipantView }
+{ type: 'participant:left'; payload: { name: string } }
+{ type: 'participant:voted'; payload: { name: string; voteCount: number } }
+{ type: 'results'; payload: ResultsPayload }
+{ type: 'force-leave' }   // navigate all facilitator tabs away
+{ type: 'room:closed' }   // show "session ended" modal
+{ type: 'connect_error'; message: string }
+{ type: 'error'; payload: { message: string } }
+```
 
 ### Derived values
 
@@ -235,11 +297,11 @@ Define responsive rules at the bottom of the relevant CSS Module file using `@me
 - Do not put socket event listeners directly in components — always via a custom hook.
 - Hooks may use other hooks.
 
-Key hooks to build:
+Key hooks:
 
 | Hook | Responsibility |
 |---|---|
-| `useRoom(roomId, role, token)` | Creates the socket with handshake auth, subscribes to all room events, tears down on unmount; returns `state`, `vote()`, `endVoting()`, `reset()` |
+| `useRoom(roomId, role, token)` | Creates the SharedWorker connection, subscribes to all room events, tears down on unmount; returns room state (`stage`, `questions`, `myVotes`, `results`, `participants`, `myName`, `expiresAt`, `roomClosed`, `forcedOut`, `error`) and action callbacks: `startVoting()`, `vote()`, `unvote()`, `endVoting()`, `revote()`, `reset()`, `forceLeave()`, `clearError()` |
 
 ---
 

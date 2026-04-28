@@ -32,7 +32,7 @@ export default function LandingPage() {
       const res = await fetch(`${BACKEND_URL}/rooms`, { method: 'POST' })
       if (!res.ok) throw new Error(`Unexpected status ${res.status}`)
       const { roomId, token } = (await res.json()) as { roomId: string; token: string }
-      sessionStorage.setItem(`facilitator-token-${roomId}`, token)
+      localStorage.setItem(`facilitator-token-${roomId}`, token)
       navigate(`/room/${roomId}`)
     } catch {
       setError('Could not create a room. Is the backend running?')

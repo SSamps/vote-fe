@@ -76,7 +76,7 @@ Base unit: `4px`. Use multiples of this unit for all margins, padding, and gaps.
 - **Border radius:** `8px` for cards, inputs, and buttons. Use `50%` only for circular avatar-style elements (not currently in the design).
 - **Borders:** `1px solid var(--color-border)` on cards and inputs.
 - **Box shadow:** Subtle only — `0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)`. Applied to cards, not buttons.
-- **No elevation layers** — there is no overlay/modal system in the current design.
+- **Modal overlay** — `position: fixed; inset: 0; background: rgba(0,0,0,0.45)` with a centred card. Used for the "Session ended" message when a room closes. The card reuses the standard card style (white surface, border, shadow, `8px` radius).
 
 ---
 
@@ -135,7 +135,7 @@ Each participant row in the sidebar shows:
 
 Row height: `36px`. Rows are separated by a `4px` gap, not borders.
 
-The sidebar has a left border (`1px solid var(--color-border)`) separating it from the voting area.
+The sidebar has a left border (`1px solid var(--color-border)`) separating it from the voting area. The countdown timer above the list uses the same uppercase label style as section headings.
 
 ---
 
@@ -156,13 +156,12 @@ When the facilitator ends voting, results replace the vote buttons in the main a
 │  Facilitator toolbar (full width, 48px tall)         │
 │  [Stage indicator]              [End voting / Reset] │
 ├───────────────────────────────────┬─────────────────┤
-│                                   │                 │
-│   Voting area (flex: 1)           │  Sidebar 240px  │
-│                                   │                 │
-│   [ 1 ]  [ 2 ]  [ 3 ]  [ 4 ]  [ 5 ]  Participants  │
-│                                   │  ─────────────  │
-│   or: results when in review      │  gentle-otter ✓ │
-│                                   │  radiant-fox  – │
+│                                   │ [›] toggle      │
+│   Voting area (flex: 1)           │ Closes in 1:45  │
+│                                   │ ─────────────── │
+│   [ 1 ]  [ 2 ]  [ 3 ]  [ 4 ]  [ 5 ]  PARTICIPANTS  │
+│                                   │ gentle-otter ✓  │
+│   or: results when in review      │ radiant-fox  –  │
 │                                   │                 │
 │   [Your name — bottom left]       │                 │
 └───────────────────────────────────┴─────────────────┘
@@ -170,7 +169,10 @@ When the facilitator ends voting, results replace the vote buttons in the main a
 
 - **Facilitator toolbar:** `48px` tall, `var(--color-surface)` background, bottom border, horizontal padding `24px`. Participants who are not facilitators do not see this bar.
 - **Voting area:** fills available space (`flex: 1`). Voting buttons are centred vertically and horizontally.
-- **Sidebar:** fixed `240px` wide, full height of the content area, left border. Scrolls independently if participant count overflows.
+- **Sidebar:** `220px` wide when expanded, collapses to `40px` (toggle button only). Full viewport height (`100vh`), left border, independent scroll. The collapse transition is `200ms ease`.
+  - **Toggle button:** `40px` tall strip at the top of the sidebar; `›` when open (click to collapse), `‹` when closed (click to expand).
+  - **Countdown timer:** displayed at the top of the expanded sidebar. Label "Closes in" in muted uppercase, value in `1.1rem` bold tabular-numeric font. Format: `H:MM:SS` when ≥ 1 hour remains, `M:SS` otherwise. Separated from the participant list by a bottom border.
+  - **Participant list:** names in `0.875rem`, one per row. "(you)" appended in muted style to the current user's own name.
 - **Your name tag:** positioned bottom-left of the voting area, muted style.
 
 ---

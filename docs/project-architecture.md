@@ -14,7 +14,7 @@ calculation, server-side error handling), see
 | Layer | Technology | Rationale |
 |---|---|---|
 | Frontend | React 19 + Vite 8 | Already chosen |
-| Frontend real-time | Socket.io client | Matches server library; handles reconnection automatically |
+| Frontend real-time | Socket.io client via SharedWorker | Single socket per room per browser; see below |
 | Backend runtime | Node.js 22 | Consistent with frontend toolchain |
 | Backend framework | Express 5 | Lightweight, well-understood, easy to attach Socket.io to |
 | Real-time transport | Socket.io (WebSockets) | Bidirectional events; built-in room broadcasting; reconnect/fallback handling |
@@ -63,14 +63,16 @@ polling is only used in the brief window before the WebSocket upgrade succeeds, 
 environments that block WebSockets. Modern browsers and Cloud Run both support WebSockets
 natively.
 
+The frontend explicitly requests WebSocket-only transport (`transports: ['websocket']`),
+skipping the polling phase entirely.
+
 **Initial approach:** Set `--max-instances=1` on the backend Cloud Run service. A single
 instance eliminates any routing concern entirely, keeps the architecture simple, and is
 safe at the expected scale.
 
-**Future mitigation if scale requires it:** Introduce a Redis instance (Cloud
-Memorystore) as a shared pub/sub bus and use the `@socket.io/redis-adapter`. This is a
-well-understood upgrade path and does not require changing the Socket.io event API
-surface.
+**Multi-instance:** The backend already has the `@socket.io/redis-adapter` wired up. Set
+`REDIS_HOST` (and related env vars) to enable it. See `vote-be/docs/architecture.md` for
+details.
 
 ---
 
@@ -95,8 +97,9 @@ Creates a new room. Rate-limited to 20 requests per minute per IP.
 ```
 
 `roomId` is a 6-character URL-safe string. `token` is a short-lived JWT scoped to this
-room and the facilitator role. Store it in `sessionStorage` keyed by roomId and pass it
-in the socket handshake auth when connecting as a facilitator.
+room and the facilitator role. Store it in `localStorage` keyed by roomId — using
+`localStorage` (not `sessionStorage`) ensures the token is shared across all browser
+tabs, so the facilitator is correctly identified in every tab they open for that room.
 
 ---
 
@@ -113,6 +116,18 @@ opening a socket connection.
 
 ## Socket.io connection
 
+The frontend connects to the backend via a `SharedWorker` (`src/workers/roomWorker.ts`)
+rather than opening a socket directly in a React component. The worker holds one socket
+per room and shares it across all browser tabs open on the same room. Tabs communicate
+with the worker via `MessagePort`.
+
+This ensures:
+- A user who opens the same room in multiple tabs appears as a single participant, not
+  multiple.
+- The facilitator's identity is consistent across all their tabs.
+- The socket is only disconnected when the last tab for that room closes or navigates
+  away.
+
 Auth is passed in the `io()` handshake `auth` object when the connection is opened.
 There is no `join` event — connecting is joining; disconnecting is leaving.
 
@@ -120,6 +135,7 @@ There is no `join` event — connecting is joining; disconnecting is leaving.
 
 ```ts
 io(BACKEND_URL, {
+  transports: ['websocket'],
   auth: {
     roomId: string,
     role: 'facilitator' | 'participant',
@@ -136,11 +152,15 @@ as `err.message`. Display it to the user.
 
 ### Client → Server events
 
-| Event | Payload | Description |
-|---|---|---|
-| `vote` | `{ value: number }` | Submit or change a vote; `value` must be an integer 1–5 |
-| `end-voting` | `{}` | Facilitator closes voting and moves to review stage |
-| `reset` | `{}` | Facilitator clears all votes and returns to voting stage |
+| Event | Payload | Who | Description |
+|---|---|---|---|
+| `start-voting` | `{ questions: Array<{ prompt: string; options: number[] }> }` | Facilitator | Moves from planning to voting; sets the questions |
+| `vote` | `{ questionIndex: number; value: number }` | Anyone | Submit a vote for one question; `value` must be in the question's `options` |
+| `unvote` | `{ questionIndex: number }` | Anyone | Withdraw a vote for one question |
+| `end-voting` | `{}` | Facilitator | Closes voting, calculates results, moves to review |
+| `revote` | `{}` | Facilitator | From review: clears votes, returns to voting with the same questions |
+| `reset` | `{}` | Facilitator | Clears questions and votes, returns to planning |
+| `close-room` | `{}` | Facilitator | Immediately closes the room for all participants (bypasses the reconnect grace period) |
 
 ---
 
@@ -148,13 +168,14 @@ as `err.message`. Display it to the user.
 
 | Event | Payload | Description |
 |---|---|---|
-| `room:state` | `{ roomId, stage, myName, myRole, participants[] }` | Full room snapshot sent immediately on connect |
-| `participant:joined` | `{ name, role, hasVoted: false }` | Broadcast when a new socket connects to the room |
+| `room:state` | See below | Full room snapshot sent immediately on connect |
+| `participant:joined` | `{ name, role, voteCount: 0 }` | Broadcast when a new socket connects to the room |
 | `participant:left` | `{ name }` | Broadcast when a socket disconnects |
-| `participant:voted` | `{ name, hasVoted: true }` | Broadcast when a vote is submitted; the value is never revealed until review |
-| `stage:changed` | `{ stage: 'voting' \| 'review' }` | Broadcast when the facilitator advances or resets the stage |
-| `results` | `{ average: number \| null, count: number }` | Broadcast alongside `stage:changed` when voting ends |
-| `room:reset` | `{}` | Broadcast alongside `stage:changed` when the room resets |
+| `participant:voted` | `{ name, voteCount: number }` | Broadcast on vote/unvote; `voteCount` is number of questions answered (value never revealed) |
+| `stage:changed` | `{ stage, questions? }` | Broadcast when stage changes; `questions` included when entering voting |
+| `results` | `{ questions: QuestionResult[] }` | Broadcast when voting ends |
+| `room:reset` | `{}` | Broadcast alongside `stage:changed` when room resets to planning |
+| `room:closed` | `{}` | Broadcast to all remaining sockets when the room is closed |
 | `error` | `{ message: string }` | Sent to a single socket when an action is rejected |
 
 The `room:state` payload shape:
@@ -164,15 +185,31 @@ The `room:state` payload shape:
   "stage": "voting",
   "myName": "gentle-otter",
   "myRole": "facilitator",
+  "expiresAt": 1234567890000,
+  "questions": [
+    { "prompt": "Complexity", "options": [1, 2, 3, 5, 8] }
+  ],
+  "myVotes": [null],
+  "results": null,
   "participants": [
-    { "name": "gentle-otter", "role": "facilitator", "hasVoted": false },
-    { "name": "radiant-fox",  "role": "participant", "hasVoted": true  }
+    { "name": "gentle-otter", "role": "facilitator", "voteCount": 0 },
+    { "name": "radiant-fox",  "role": "participant", "voteCount": 1 }
   ]
 }
 ```
 
-Vote values are never included in any server → client payload. `hasVoted` is the only
-vote-related field visible to other participants during voting.
+`expiresAt` is a Unix millisecond timestamp. Use it to drive a client-side countdown
+timer — compute `expiresAt - Date.now()` each second and display the result.
+
+`myVotes` is an array indexed by question; each entry is the user's current vote value
+or `null` if not yet voted. Vote values are never included in payloads visible to other
+participants — `voteCount` (number of questions answered) is the only vote-related field
+shared during the voting stage.
+
+`results` is `null` except during the review stage, where it contains a `QuestionResult`
+per question (prompt, count, average, median, mode, breakdown).
+
+`questions` is an empty array during the planning stage.
 
 ---
 
@@ -203,8 +240,10 @@ The React app needs two things:
 1. **Two REST calls** — `POST /rooms` when a facilitator creates a room; `GET /rooms/:roomId`
    on the join flow to validate a room code before connecting.
 
-2. **One persistent Socket.io connection** per room session — opened after the room ID is
-   known, kept open for the life of the room visit.
+2. **One SharedWorker per origin** (`src/workers/roomWorker.ts`) — manages one socket
+   connection per active room. `RoomPage` connects to the worker via `MessagePort`,
+   subscribes to `WorkerToTabMessage` events, and sends `TabToWorkerMessage` commands.
+   Message types are defined in `src/workers/roomWorkerTypes.ts`.
 
 The frontend URL scheme:
 - `/` — landing page (create or join)
@@ -219,7 +258,6 @@ landing page create action.
 ## Out of scope (for now)
 
 - Persistent storage
-- Facilitator reconnect / transfer
-- Redis adapter for multi-instance scale
 - Authentication
-- Custom vote scales
+- Facilitator transfer
+- Mobile-specific layout optimisation

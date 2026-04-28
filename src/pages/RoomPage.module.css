@@ -63,10 +63,21 @@
 /* ── room layout (found state) ── */
 
 .roomLayout {
-  display: flex;
-  flex-direction: column;
   height: 100vh;
   overflow: hidden;
+}
+
+.roomBody {
+  display: flex;
+  height: 100%;
+}
+
+.mainColumn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .topBar {
@@ -75,12 +86,6 @@
   padding: 1rem 1.5rem;
   flex-shrink: 0;
   text-align: center;
-}
-
-.roomBody {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
 }
 
 .mainContent {
@@ -93,6 +98,8 @@
 .mainCenter {
   text-align: center;
   padding: 2rem;
+  width: 100%;
+  max-width: 640px;
 }
 
 .roomId {

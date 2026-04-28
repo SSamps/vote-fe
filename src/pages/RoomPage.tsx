@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 
 import type { ParticipantView, WorkerToTabMessage, Stage } from '../workers/roomWorkerTypes.js'
 import PlanningForm from '../components/PlanningForm/PlanningForm.js'
+import VotingScale from '../components/VotingScale/VotingScale.js'
 import styles from './RoomPage.module.css'
 
 const BACKEND_URL =
@@ -25,6 +26,9 @@ export default function RoomPage() {
   const role = token ? 'facilitator' : 'participant'
   const [status, setStatus] = useState<Status>('loading')
   const [stage, setStage] = useState<Stage>('planning')
+  const [prompt, setPrompt] = useState<string | null>(null)
+  const [options, setOptions] = useState<number[]>([])
+  const [myVote, setMyVote] = useState<number | null>(null)
   const [participants, setParticipants] = useState<ParticipantView[]>([])
   const [myName, setMyName] = useState<string | null>(null)
   const workerPortRef = useRef<MessagePort | null>(null)
@@ -68,11 +72,20 @@ export default function RoomPage() {
       const msg = e.data
       if (msg.type === 'room:state') {
         setStage(msg.payload.stage)
+        setPrompt(msg.payload.prompt)
+        setOptions(msg.payload.options)
         setMyName(msg.payload.myName)
         setParticipants(msg.payload.participants)
         setExpiresAt(msg.payload.expiresAt)
       } else if (msg.type === 'stage:changed') {
         setStage(msg.payload.stage)
+        if (msg.payload.prompt !== undefined) setPrompt(msg.payload.prompt)
+        if (msg.payload.options !== undefined) setOptions(msg.payload.options)
+        if (msg.payload.stage === 'planning') {
+          setMyVote(null)
+          setPrompt(null)
+          setOptions([])
+        }
       } else if (msg.type === 'participant:joined') {
         setParticipants((prev) => [...prev, msg.payload])
       } else if (msg.type === 'participant:left') {
@@ -151,58 +164,68 @@ export default function RoomPage() {
         </div>
       )}
 
-      <header className={styles.topBar}>
-        <h1 className={styles.roomId}>
-          Room: {roomId}
-          <span className={styles.identity}> — {myName ?? '…'} ({role})</span>
-        </h1>
-        <div className={styles.stages}>
-          {(['planning', 'voting', 'review'] as Stage[]).map((s, i) => (
-            <span key={s} className={s === stage ? styles.stageActive : styles.stageInactive}>
-              {i > 0 && <span className={styles.stageSep}>›</span>}
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-            </span>
-          ))}
-        </div>
-      </header>
-
       <div className={styles.roomBody}>
+        <div className={styles.mainColumn}>
+        <header className={styles.topBar}>
+          <h1 className={styles.roomId}>
+            Room: {roomId}
+            <span className={styles.identity}> — {myName ?? '…'} ({role})</span>
+          </h1>
+          <div className={styles.stages}>
+            {(['planning', 'voting', 'review'] as Stage[]).map((s, i) => (
+              <span key={s} className={s === stage ? styles.stageActive : styles.stageInactive}>
+                {i > 0 && <span className={styles.stageSep}>›</span>}
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </span>
+            ))}
+          </div>
+        </header>
         <main className={styles.mainContent}>
           <div className={styles.mainCenter}>
-          {stage === 'planning' && role === 'facilitator' && <PlanningForm />}
-          {role === 'facilitator' && (
-            <div className={styles.facilitatorActions}>
-              {stage === 'planning' && (
-                <button
-                  className={styles.actionButton}
-                  onClick={() => workerPortRef.current?.postMessage({ type: 'start-voting' })}
-                >
-                  Start voting
-                </button>
-              )}
-              {stage === 'voting' && (
-                <button
-                  className={styles.actionButton}
-                  onClick={() => workerPortRef.current?.postMessage({ type: 'end-voting' })}
-                >
-                  End voting
-                </button>
-              )}
-              {stage === 'review' && (
-                <button
-                  className={`${styles.actionButton} ${styles.actionButtonSecondary}`}
-                  onClick={() => workerPortRef.current?.postMessage({ type: 'reset' })}
-                >
-                  Reset
-                </button>
-              )}
-            </div>
+          {stage === 'planning' && role === 'facilitator' && (
+            <PlanningForm
+              onStartVoting={(p, o) =>
+                workerPortRef.current?.postMessage({ type: 'start-voting', prompt: p, options: o })
+              }
+            />
           )}
           {stage === 'planning' && role === 'participant' && (
             <p className={styles.muted}>Waiting for the facilitator to set up the vote…</p>
           )}
+          {stage === 'voting' && prompt !== null && (
+            <VotingScale
+              prompt={prompt}
+              options={options}
+              selected={myVote}
+              onVote={(value) => {
+                setMyVote(value)
+                workerPortRef.current?.postMessage({ type: 'vote', value })
+              }}
+            />
+          )}
+          {role === 'facilitator' && stage === 'voting' && (
+            <div className={styles.facilitatorActions}>
+              <button
+                className={styles.actionButton}
+                onClick={() => workerPortRef.current?.postMessage({ type: 'end-voting' })}
+              >
+                End voting
+              </button>
+            </div>
+          )}
+          {role === 'facilitator' && stage === 'review' && (
+            <div className={styles.facilitatorActions}>
+              <button
+                className={`${styles.actionButton} ${styles.actionButtonSecondary}`}
+                onClick={() => workerPortRef.current?.postMessage({ type: 'reset' })}
+              >
+                Reset
+              </button>
+            </div>
+          )}
           </div>
         </main>
+        </div>
 
         <aside className={`${styles.sidebar} ${sidebarOpen ? '' : styles.sidebarCollapsed}`}>
         <button

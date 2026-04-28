@@ -28,6 +28,28 @@
   margin-bottom: 0.5rem;
 }
 
+.hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 0 0 0.6rem;
+}
+
+.voteTypeOption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--color-text);
+  cursor: default;
+}
+
+.radio {
+  accent-color: var(--color-primary);
+  width: 1rem;
+  height: 1rem;
+  cursor: default;
+}
+
 .textarea {
   width: 100%;
   padding: 0.6rem 0.75rem;
@@ -118,4 +140,27 @@
 
 .addButton:hover {
   text-decoration: underline;
+}
+
+.submitButton {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.7rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: #fff;
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.submitButton:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.submitButton:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

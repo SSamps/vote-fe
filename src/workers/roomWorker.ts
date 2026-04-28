@@ -83,9 +83,19 @@ self.onconnect = (event: MessageEvent) => {
       })
     }
 
-    if (msg.type === 'start-voting' || msg.type === 'end-voting' || msg.type === 'reset') {
+    if (msg.type === 'end-voting' || msg.type === 'reset') {
       const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
       if (conn) conn.socket.emit(msg.type, {})
+    }
+
+    if (msg.type === 'start-voting') {
+      const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
+      if (conn) conn.socket.emit('start-voting', { prompt: msg.prompt, options: msg.options })
+    }
+
+    if (msg.type === 'vote') {
+      const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
+      if (conn) conn.socket.emit('vote', { value: msg.value })
     }
 
     if (msg.type === 'leave') {

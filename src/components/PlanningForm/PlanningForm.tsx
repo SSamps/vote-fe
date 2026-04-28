@@ -3,21 +3,25 @@ import styles from './PlanningForm.module.css'
 
 interface Option {
   id: number
-  text: string
+  value: string
+}
+
+interface PlanningFormProps {
+  onStartVoting: (prompt: string, options: number[]) => void
 }
 
 let nextId = 1
 
-function makeOption(text = ''): Option {
-  return { id: nextId++, text }
+function makeOption(value = ''): Option {
+  return { id: nextId++, value }
 }
 
-export default function PlanningForm() {
+export default function PlanningForm({ onStartVoting }: PlanningFormProps) {
   const [prompt, setPrompt] = useState('')
   const [options, setOptions] = useState<Option[]>([makeOption(), makeOption()])
 
-  function updateOption(id: number, text: string) {
-    setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, text } : o)))
+  function updateOption(id: number, value: string) {
+    setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, value } : o)))
   }
 
   function addOption() {
@@ -28,9 +32,34 @@ export default function PlanningForm() {
     setOptions((prev) => prev.filter((o) => o.id !== id))
   }
 
+  function handleSubmit() {
+    const parsedOptions = options
+      .map((o) => parseFloat(o.value))
+      .filter((v) => !isNaN(v))
+
+    if (!prompt.trim() || parsedOptions.length < 2) return
+    onStartVoting(prompt.trim(), parsedOptions)
+  }
+
+  const parsedOptions = options.map((o) => parseFloat(o.value)).filter((v) => !isNaN(v))
+  const canSubmit = prompt.trim().length > 0 && parsedOptions.length >= 2
+
   return (
     <div className={styles.card}>
       <h2 className={styles.heading}>Set up the vote</h2>
+
+      <div className={styles.field}>
+        <span className={styles.label}>Vote type</span>
+        <label className={styles.voteTypeOption}>
+          <input
+            type="radio"
+            checked
+            onChange={() => {}}
+            className={styles.radio}
+          />
+          Sliding scale
+        </label>
+      </div>
 
       <div className={styles.field}>
         <label className={styles.label} htmlFor="vote-prompt">
@@ -47,15 +76,16 @@ export default function PlanningForm() {
       </div>
 
       <div className={styles.field}>
-        <span className={styles.label}>Options</span>
+        <span className={styles.label}>Scale points</span>
+        <p className={styles.hint}>The numeric values participants can vote on, e.g. 1, 2, 3, 5, 8.</p>
         <ul className={styles.optionList}>
           {options.map((option, i) => (
             <li key={option.id} className={styles.optionRow}>
               <input
                 className={styles.optionInput}
-                type="text"
-                placeholder={`Option ${i + 1}`}
-                value={option.text}
+                type="number"
+                placeholder={i === 0 ? 'e.g. 1' : i === 1 ? 'e.g. 5' : `e.g. ${i * 5}`}
+                value={option.value}
                 onChange={(e) => updateOption(option.id, e.target.value)}
               />
               <button
@@ -70,9 +100,17 @@ export default function PlanningForm() {
           ))}
         </ul>
         <button className={styles.addButton} onClick={addOption}>
-          + Add option
+          + Add point
         </button>
       </div>
+
+      <button
+        className={styles.submitButton}
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+      >
+        Start voting
+      </button>
     </div>
   )
 }

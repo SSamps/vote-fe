@@ -1,0 +1,92 @@
+/* NODE_SIZE must match the width/height of .nodeDot */
+:root {
+  --node-size: 28px;
+  --node-radius: 14px;
+}
+
+.wrapper {
+  width: 100%;
+  max-width: 560px;
+  text-align: left;
+}
+
+.prompt {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 2rem;
+  text-align: center;
+}
+
+.scaleOuter {
+  position: relative;
+  /* indent by half a node so the track aligns with node centres */
+  padding: 0 var(--node-radius);
+}
+
+.track {
+  position: absolute;
+  top: var(--node-radius);
+  left: var(--node-radius);
+  right: var(--node-radius);
+  height: 2px;
+  background: var(--color-border);
+  border-radius: 1px;
+}
+
+.nodes {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.node:disabled {
+  cursor: default;
+}
+
+.nodeDot {
+  width: var(--node-size);
+  height: var(--node-size);
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  transition: background 0.1s, border-color 0.1s;
+  box-sizing: border-box;
+}
+
+.node:hover:not(:disabled) .nodeDot {
+  border-color: var(--color-primary);
+  background: #f0f5ff;
+}
+
+.nodeSelected .nodeDot {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.node:disabled.nodeSelected .nodeDot {
+  background: var(--color-text-muted);
+  border-color: var(--color-text-muted);
+}
+
+.nodeLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.nodeSelected .nodeLabel {
+  color: var(--color-primary);
+}

@@ -9,6 +9,8 @@ export type Stage = 'planning' | 'voting' | 'review'
 export interface RoomStatePayload {
   roomId: string
   stage: Stage
+  prompt: string | null
+  options: number[]
   myName: string
   myRole: string
   participants: ParticipantView[]
@@ -18,13 +20,14 @@ export interface RoomStatePayload {
 export type TabToWorkerMessage =
   | { type: 'join'; backendUrl: string; roomId: string; role: string; token?: string }
   | { type: 'leave' }
-  | { type: 'start-voting' }
+  | { type: 'start-voting'; prompt: string; options: number[] }
   | { type: 'end-voting' }
   | { type: 'reset' }
+  | { type: 'vote'; value: number }
 
 export type WorkerToTabMessage =
   | { type: 'room:state'; payload: RoomStatePayload }
-  | { type: 'stage:changed'; payload: { stage: Stage } }
+  | { type: 'stage:changed'; payload: { stage: Stage; prompt?: string; options?: number[] } }
   | { type: 'participant:joined'; payload: ParticipantView }
   | { type: 'participant:left'; payload: { name: string } }
   | { type: 'room:closed' }

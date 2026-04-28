@@ -1,16 +1,35 @@
 export interface ParticipantView {
   name: string
   role: 'facilitator' | 'participant'
-  hasVoted: boolean
+  voteCount: number
 }
 
 export type Stage = 'planning' | 'voting' | 'review'
 
+export interface QuestionResult {
+  prompt: string
+  count: number
+  average: number | null
+  median: number | null
+  mode: number[] | null
+  breakdown: Array<{ value: number; votes: number }>
+}
+
+export interface ResultsPayload {
+  questions: QuestionResult[]
+}
+
+export interface StageChangedPayload {
+  stage: Stage
+  questions?: Array<{ prompt: string; options: number[] }>
+}
+
 export interface RoomStatePayload {
   roomId: string
   stage: Stage
-  prompt: string | null
-  options: number[]
+  questions: Array<{ prompt: string; options: number[] }>
+  myVotes: (number | null)[]
+  results: ResultsPayload | null
   myName: string
   myRole: string
   participants: ParticipantView[]
@@ -20,18 +39,22 @@ export interface RoomStatePayload {
 export type TabToWorkerMessage =
   | { type: 'join'; backendUrl: string; roomId: string; role: string; token?: string }
   | { type: 'leave' }
-  | { type: 'start-voting'; prompt: string; options: number[] }
+  | { type: 'start-voting'; questions: Array<{ prompt: string; options: number[] }> }
   | { type: 'end-voting' }
+  | { type: 'revote' }
   | { type: 'reset' }
-  | { type: 'vote'; value: number }
-  | { type: 'unvote' }
+  | { type: 'force-leave' }
+  | { type: 'vote'; questionIndex: number; value: number }
+  | { type: 'unvote'; questionIndex: number }
 
 export type WorkerToTabMessage =
   | { type: 'room:state'; payload: RoomStatePayload }
-  | { type: 'stage:changed'; payload: { stage: Stage; prompt?: string; options?: number[] } }
+  | { type: 'stage:changed'; payload: StageChangedPayload }
   | { type: 'participant:joined'; payload: ParticipantView }
   | { type: 'participant:left'; payload: { name: string } }
-  | { type: 'participant:voted'; payload: { name: string; hasVoted: boolean } }
+  | { type: 'participant:voted'; payload: { name: string; voteCount: number } }
+  | { type: 'results'; payload: ResultsPayload }
+  | { type: 'force-leave' }
   | { type: 'room:closed' }
   | { type: 'connect_error'; message: string }
   | { type: 'error'; payload: { message: string } }

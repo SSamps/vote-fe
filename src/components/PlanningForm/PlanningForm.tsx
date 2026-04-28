@@ -1,114 +1,191 @@
 import { useState } from 'react'
 import styles from './PlanningForm.module.css'
 
-interface Option {
+interface ScaleOption {
   id: number
   value: string
 }
 
+interface QuestionDraft {
+  id: number
+  prompt: string
+  options: ScaleOption[]
+}
+
 interface PlanningFormProps {
-  onStartVoting: (prompt: string, options: number[]) => void
+  initialQuestions?: Array<{ prompt: string; options: number[] }>
+  onStartVoting: (questions: Array<{ prompt: string; options: number[] }>) => void
 }
 
 let nextId = 1
+const uid = () => nextId++
 
-function makeOption(value = ''): Option {
-  return { id: nextId++, value }
+function makeOption(value = ''): ScaleOption {
+  return { id: uid(), value }
 }
 
-export default function PlanningForm({ onStartVoting }: PlanningFormProps) {
-  const [prompt, setPrompt] = useState('')
-  const [options, setOptions] = useState<Option[]>([makeOption(), makeOption()])
+function makeQuestion(): QuestionDraft {
+  return { id: uid(), prompt: '', options: [makeOption(), makeOption()] }
+}
 
-  function updateOption(id: number, value: string) {
-    setOptions((prev) => prev.map((o) => (o.id === id ? { ...o, value } : o)))
+function hydrateQuestions(initial: Array<{ prompt: string; options: number[] }>): QuestionDraft[] {
+  return initial.map((q) => ({
+    id: uid(),
+    prompt: q.prompt,
+    options: q.options.map((v) => makeOption(String(v))),
+  }))
+}
+
+function parseOptions(options: ScaleOption[]): number[] {
+  return options.map((o) => parseFloat(o.value)).filter((v) => !isNaN(v))
+}
+
+function isQuestionValid(q: QuestionDraft): boolean {
+  return q.prompt.trim().length > 0 && parseOptions(q.options).length >= 2
+}
+
+export default function PlanningForm({ initialQuestions, onStartVoting }: PlanningFormProps) {
+  const [questions, setQuestions] = useState<QuestionDraft[]>(
+    () => initialQuestions?.length ? hydrateQuestions(initialQuestions) : [makeQuestion()]
+  )
+
+  function updatePrompt(id: number, prompt: string) {
+    setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, prompt } : q)))
   }
 
-  function addOption() {
-    setOptions((prev) => [...prev, makeOption()])
+  function addQuestion() {
+    setQuestions((prev) => [...prev, makeQuestion()])
   }
 
-  function removeOption(id: number) {
-    setOptions((prev) => prev.filter((o) => o.id !== id))
+  function removeQuestion(id: number) {
+    setQuestions((prev) => prev.filter((q) => q.id !== id))
+  }
+
+  function updateOption(questionId: number, optionId: number, value: string) {
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === questionId
+          ? { ...q, options: q.options.map((o) => (o.id === optionId ? { ...o, value } : o)) }
+          : q,
+      ),
+    )
+  }
+
+  function addOption(questionId: number) {
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === questionId ? { ...q, options: [...q.options, makeOption()] } : q)),
+    )
+  }
+
+  function removeOption(questionId: number, optionId: number) {
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === questionId
+          ? { ...q, options: q.options.filter((o) => o.id !== optionId) }
+          : q,
+      ),
+    )
   }
 
   function handleSubmit() {
-    const parsedOptions = options
-      .map((o) => parseFloat(o.value))
-      .filter((v) => !isNaN(v))
-
-    if (!prompt.trim() || parsedOptions.length < 2) return
-    onStartVoting(prompt.trim(), parsedOptions)
+    const payload = questions.map((q) => ({
+      prompt: q.prompt.trim(),
+      options: parseOptions(q.options),
+    }))
+    onStartVoting(payload)
   }
 
-  const parsedOptions = options.map((o) => parseFloat(o.value)).filter((v) => !isNaN(v))
-  const canSubmit = prompt.trim().length > 0 && parsedOptions.length >= 2
+  const canSubmit = questions.length > 0 && questions.every(isQuestionValid)
 
   return (
     <div className={styles.card}>
-      <h2 className={styles.heading}>Set up the vote</h2>
+      <div className={styles.headingRow}>
+        <h2 className={styles.heading}>Set up the vote</h2>
+        {initialQuestions?.length && (
+          <button
+            className={styles.startOverButton}
+            onClick={() => setQuestions([makeQuestion()])}
+          >
+            Start over
+          </button>
+        )}
+      </div>
 
       <div className={styles.field}>
         <span className={styles.label}>Vote type</span>
         <label className={styles.voteTypeOption}>
-          <input
-            type="radio"
-            checked
-            onChange={() => {}}
-            className={styles.radio}
-          />
+          <input type="radio" checked onChange={() => {}} className={styles.radio} />
           Sliding scale
         </label>
       </div>
 
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor="vote-prompt">
-          Prompt
-        </label>
-        <textarea
-          id="vote-prompt"
-          className={styles.textarea}
-          placeholder="What are we voting on?"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={3}
-        />
-      </div>
-
-      <div className={styles.field}>
-        <span className={styles.label}>Scale points</span>
-        <p className={styles.hint}>The numeric values participants can vote on, e.g. 1, 2, 3, 5, 8.</p>
-        <ul className={styles.optionList}>
-          {options.map((option, i) => (
-            <li key={option.id} className={styles.optionRow}>
-              <input
-                className={styles.optionInput}
-                type="number"
-                placeholder={i === 0 ? 'e.g. 1' : i === 1 ? 'e.g. 5' : `e.g. ${i * 5}`}
-                value={option.value}
-                onChange={(e) => updateOption(option.id, e.target.value)}
-              />
+      {questions.map((q, qi) => (
+        <div key={q.id} className={styles.questionBlock}>
+          <div className={styles.questionHeader}>
+            <span className={styles.questionLabel}>
+              {questions.length > 1 ? `Question ${qi + 1}` : 'Question'}
+            </span>
+            {questions.length > 1 && (
               <button
-                className={styles.removeButton}
-                onClick={() => removeOption(option.id)}
-                disabled={options.length <= 2}
-                aria-label="Remove option"
+                className={styles.removeQuestionButton}
+                onClick={() => removeQuestion(q.id)}
+                aria-label={`Remove question ${qi + 1}`}
               >
-                ×
+                Remove
               </button>
-            </li>
-          ))}
-        </ul>
-        <button className={styles.addButton} onClick={addOption}>
-          + Add point
-        </button>
-      </div>
+            )}
+          </div>
 
-      <button
-        className={styles.submitButton}
-        onClick={handleSubmit}
-        disabled={!canSubmit}
-      >
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor={`prompt-${q.id}`}>
+              Prompt
+            </label>
+            <textarea
+              id={`prompt-${q.id}`}
+              className={styles.textarea}
+              placeholder="What are we voting on?"
+              value={q.prompt}
+              onChange={(e) => updatePrompt(q.id, e.target.value)}
+              rows={3}
+            />
+          </div>
+
+          <div className={styles.field}>
+            <span className={styles.label}>Scale points</span>
+            <p className={styles.hint}>The numeric values participants can vote on, e.g. 1, 2, 3, 5, 8.</p>
+            <ul className={styles.optionList}>
+              {q.options.map((option, oi) => (
+                <li key={option.id} className={styles.optionRow}>
+                  <input
+                    className={styles.optionInput}
+                    type="number"
+                    placeholder={oi === 0 ? 'e.g. 1' : oi === 1 ? 'e.g. 5' : `e.g. ${oi * 5}`}
+                    value={option.value}
+                    onChange={(e) => updateOption(q.id, option.id, e.target.value)}
+                  />
+                  <button
+                    className={styles.removeButton}
+                    onClick={() => removeOption(q.id, option.id)}
+                    disabled={q.options.length <= 2}
+                    aria-label="Remove option"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button className={styles.addButton} onClick={() => addOption(q.id)}>
+              + Add point
+            </button>
+          </div>
+        </div>
+      ))}
+
+      <button className={styles.addQuestionButton} onClick={addQuestion}>
+        + Add question
+      </button>
+
+      <button className={styles.submitButton} onClick={handleSubmit} disabled={!canSubmit}>
         Start voting
       </button>
     </div>

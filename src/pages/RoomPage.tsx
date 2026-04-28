@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 
-import type { ParticipantView, WorkerToTabMessage, Stage } from '../workers/roomWorkerTypes.js'
+import type { ParticipantView, WorkerToTabMessage, Stage, ResultsPayload } from '../workers/roomWorkerTypes.js'
 import PlanningForm from '../components/PlanningForm/PlanningForm.js'
 import VotingScale from '../components/VotingScale/VotingScale.js'
 import styles from './RoomPage.module.css'
@@ -22,13 +22,15 @@ function formatTimeLeft(ms: number): string {
 
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
+  const navigate = useNavigate()
   const token = roomId ? localStorage.getItem(`facilitator-token-${roomId}`) : null
   const role = token ? 'facilitator' : 'participant'
   const [status, setStatus] = useState<Status>('loading')
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
   const [stage, setStage] = useState<Stage>('planning')
-  const [prompt, setPrompt] = useState<string | null>(null)
-  const [options, setOptions] = useState<number[]>([])
-  const [myVote, setMyVote] = useState<number | null>(null)
+  const [questions, setQuestions] = useState<Array<{ prompt: string; options: number[] }>>([])
+  const [myVotes, setMyVotes] = useState<(number | null)[]>([])
+  const [results, setResults] = useState<ResultsPayload | null>(null)
   const [participants, setParticipants] = useState<ParticipantView[]>([])
   const [myName, setMyName] = useState<string | null>(null)
   const workerPortRef = useRef<MessagePort | null>(null)
@@ -72,19 +74,24 @@ export default function RoomPage() {
       const msg = e.data
       if (msg.type === 'room:state') {
         setStage(msg.payload.stage)
-        setPrompt(msg.payload.prompt)
-        setOptions(msg.payload.options)
+        setQuestions(msg.payload.questions)
+        setMyVotes(msg.payload.myVotes)
+        setResults(msg.payload.results)
         setMyName(msg.payload.myName)
         setParticipants(msg.payload.participants)
         setExpiresAt(msg.payload.expiresAt)
       } else if (msg.type === 'stage:changed') {
         setStage(msg.payload.stage)
-        if (msg.payload.prompt !== undefined) setPrompt(msg.payload.prompt)
-        if (msg.payload.options !== undefined) setOptions(msg.payload.options)
+        if (msg.payload.stage === 'voting') {
+          const qs = msg.payload.questions ?? []
+          setQuestions(qs)
+          setMyVotes(qs.map(() => null))
+          setParticipants((prev) => prev.map((p) => ({ ...p, voteCount: 0 })))
+        }
         if (msg.payload.stage === 'planning') {
-          setMyVote(null)
-          setPrompt(null)
-          setOptions([])
+          setMyVotes([])
+          setResults(null)
+          setParticipants((prev) => prev.map((p) => ({ ...p, voteCount: 0 })))
         }
       } else if (msg.type === 'participant:joined') {
         setParticipants((prev) => [...prev, msg.payload])
@@ -92,8 +99,12 @@ export default function RoomPage() {
         setParticipants((prev) => prev.filter((p) => p.name !== msg.payload.name))
       } else if (msg.type === 'participant:voted') {
         setParticipants((prev) =>
-          prev.map((p) => p.name === msg.payload.name ? { ...p, hasVoted: msg.payload.hasVoted } : p),
+          prev.map((p) => p.name === msg.payload.name ? { ...p, voteCount: msg.payload.voteCount } : p),
         )
+      } else if (msg.type === 'results') {
+        setResults(msg.payload)
+      } else if (msg.type === 'force-leave') {
+        navigate('/')
       } else if (msg.type === 'room:closed') {
         setRoomClosed(true)
       } else if (msg.type === 'connect_error') {
@@ -161,9 +172,32 @@ export default function RoomPage() {
           <div className={styles.card}>
             <h2 className={styles.heading}>Session ended</h2>
             <p className={styles.body}>The facilitator has closed the room.</p>
-            <Link to="/" className={styles.link}>
-              Back to home
-            </Link>
+            <Link to="/" className={styles.link}>Back to home</Link>
+          </div>
+        </div>
+      )}
+
+      {showLeaveModal && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.card}>
+            <h2 className={styles.heading}>Leave room?</h2>
+            <p className={styles.body}>
+              You are the facilitator. Leaving will close the room for all participants.
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                className={`${styles.actionButton} ${styles.actionButtonDanger}`}
+                onClick={() => workerPortRef.current?.postMessage({ type: 'force-leave' })}
+              >
+                Leave &amp; close room
+              </button>
+              <button
+                className={`${styles.actionButton} ${styles.actionButtonSecondary}`}
+                onClick={() => setShowLeaveModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -171,6 +205,12 @@ export default function RoomPage() {
       <div className={styles.roomBody}>
         <div className={styles.mainColumn}>
         <header className={styles.topBar}>
+          <button
+            className={styles.leaveButton}
+            onClick={() => role === 'facilitator' ? setShowLeaveModal(true) : navigate('/')}
+          >
+            Leave
+          </button>
           <h1 className={styles.roomId}>
             Room: {roomId}
             <span className={styles.identity}> — {myName ?? '…'} ({role})</span>
@@ -188,29 +228,35 @@ export default function RoomPage() {
           <div className={styles.mainCenter}>
           {stage === 'planning' && role === 'facilitator' && (
             <PlanningForm
-              onStartVoting={(p, o) =>
-                workerPortRef.current?.postMessage({ type: 'start-voting', prompt: p, options: o })
+              initialQuestions={questions.length > 0 ? questions : undefined}
+              onStartVoting={(qs) =>
+                workerPortRef.current?.postMessage({ type: 'start-voting', questions: qs })
               }
             />
           )}
           {stage === 'planning' && role === 'participant' && (
             <p className={styles.muted}>Waiting for the facilitator to set up the vote…</p>
           )}
-          {stage === 'voting' && prompt !== null && (
-            <VotingScale
-              prompt={prompt}
-              options={options}
-              selected={myVote}
-              onVote={(value) => {
-                if (value === myVote) {
-                  setMyVote(null)
-                  workerPortRef.current?.postMessage({ type: 'unvote' })
-                } else {
-                  setMyVote(value)
-                  workerPortRef.current?.postMessage({ type: 'vote', value })
-                }
-              }}
-            />
+          {stage === 'voting' && (
+            <div className={styles.questionStack}>
+              {questions.map((q, i) => (
+                <VotingScale
+                  key={i}
+                  prompt={q.prompt}
+                  options={q.options}
+                  selected={myVotes[i] ?? null}
+                  onVote={(value) => {
+                    if (value === myVotes[i]) {
+                      setMyVotes((prev) => { const next = [...prev]; next[i] = null; return next })
+                      workerPortRef.current?.postMessage({ type: 'unvote', questionIndex: i })
+                    } else {
+                      setMyVotes((prev) => { const next = [...prev]; next[i] = value; return next })
+                      workerPortRef.current?.postMessage({ type: 'vote', questionIndex: i, value })
+                    }
+                  }}
+                />
+              ))}
+            </div>
           )}
           {role === 'facilitator' && stage === 'voting' && (
             <div className={styles.facilitatorActions}>
@@ -220,10 +266,86 @@ export default function RoomPage() {
               >
                 End voting
               </button>
+              <button
+                className={`${styles.actionButton} ${styles.actionButtonSecondary}`}
+                onClick={() => workerPortRef.current?.postMessage({ type: 'reset' })}
+              >
+                Back to planning
+              </button>
+            </div>
+          )}
+          {stage === 'review' && (
+            <div className={styles.results}>
+              {results ? (
+                results.questions.map((q, i) => {
+                  const maxBreakdownVotes = Math.max(...q.breakdown.map(b => b.votes), 1)
+                  return (
+                    <div key={i} className={styles.resultCard}>
+                      <p className={styles.resultsPrompt}>{q.prompt}</p>
+                      {q.average !== null ? (
+                        <>
+                          <p className={styles.resultsAverage}>{q.average}</p>
+                          <p className={styles.resultsMeta}>{q.count} vote{q.count !== 1 ? 's' : ''}</p>
+                        </>
+                      ) : (
+                        <p className={styles.resultsMeta}>No votes were cast.</p>
+                      )}
+                      {q.count > 0 && (
+                        <details className={styles.details}>
+                          <summary className={styles.detailsSummary}>Details</summary>
+                          <div className={styles.detailsContent}>
+                            <div className={styles.breakdown}>
+                              <div className={styles.breakdownRow}>
+                                <span className={`${styles.breakdownLabel} ${styles.breakdownHeaderCell}`}>Option</span>
+                                <span className={styles.breakdownBar} style={{ background: 'transparent' }} />
+                                <span className={`${styles.breakdownCount} ${styles.breakdownHeaderCell}`}>Votes</span>
+                              </div>
+                              {q.breakdown.map((b) => (
+                                <div key={b.value} className={styles.breakdownRow}>
+                                  <span className={styles.breakdownLabel}>{b.value}</span>
+                                  <span className={styles.breakdownBar}>
+                                    <span
+                                      className={styles.breakdownFill}
+                                      style={{ width: `${(b.votes / maxBreakdownVotes) * 100}%` }}
+                                    />
+                                  </span>
+                                  <span className={styles.breakdownCount}>{b.votes}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className={styles.stats}>
+                              <div className={styles.stat}>
+                                <span className={styles.statLabel}>Mean</span>
+                                <span className={styles.statValue}>{q.average}</span>
+                              </div>
+                              <div className={styles.stat}>
+                                <span className={styles.statLabel}>Median</span>
+                                <span className={styles.statValue}>{q.median}</span>
+                              </div>
+                              <div className={styles.stat}>
+                                <span className={styles.statLabel}>Mode</span>
+                                <span className={styles.statValue}>{q.mode?.join(', ')}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  )
+                })
+              ) : (
+                <p className={styles.resultsMeta}>Loading results…</p>
+              )}
             </div>
           )}
           {role === 'facilitator' && stage === 'review' && (
             <div className={styles.facilitatorActions}>
+              <button
+                className={styles.actionButton}
+                onClick={() => workerPortRef.current?.postMessage({ type: 'revote' })}
+              >
+                Vote again
+              </button>
               <button
                 className={`${styles.actionButton} ${styles.actionButtonSecondary}`}
                 onClick={() => workerPortRef.current?.postMessage({ type: 'reset' })}
@@ -254,10 +376,16 @@ export default function RoomPage() {
             </div>
             <h2 className={styles.sidebarHeading}>Participants ({participants.length})</h2>
             {stage === 'voting' && (() => {
-              const voted = participants.filter((p) => p.hasVoted).length
-              const pending = participants.length - voted
+              const total = questions.length
+              const complete = participants.filter((p) => p.voteCount === total).length
+              const partial = participants.filter((p) => p.voteCount > 0 && p.voteCount < total).length
+              const none = participants.filter((p) => p.voteCount === 0).length
               return (
-                <p className={styles.voteCount}>{voted} voted · {pending} remaining</p>
+                <p className={styles.voteCount}>
+                  {complete} done
+                  {total > 1 && ` · ${partial} in progress`}
+                  {` · ${none} remaining`}
+                </p>
               )
             })()}
             <ul className={styles.participantList}>
@@ -268,10 +396,11 @@ export default function RoomPage() {
                     {p.name === myName && <span className={styles.you}> (you)</span>}
                   </span>
                   {stage === 'voting' && (
-                    <span
-                      className={p.hasVoted ? styles.votedDot : styles.unvotedDot}
-                      aria-label={p.hasVoted ? 'Voted' : 'Not yet voted'}
-                    />
+                    <span className={styles.voteIndicator} aria-label={`${p.voteCount} of ${questions.length} answered`}>
+                      {questions.map((_, i) => (
+                        <span key={i} className={i < p.voteCount ? styles.votedDot : styles.unvotedDot} />
+                      ))}
+                    </span>
                   )}
                 </li>
               ))}

@@ -3,7 +3,8 @@ import type {
   TabToWorkerMessage,
   WorkerToTabMessage,
   RoomStatePayload,
-  Stage,
+  ResultsPayload,
+  StageChangedPayload,
 } from './roomWorkerTypes.js'
 
 declare const self: { onconnect: ((event: MessageEvent) => void) | null }
@@ -55,8 +56,27 @@ self.onconnect = (event: MessageEvent) => {
         broadcast({ type: 'room:state', payload })
       })
 
-      socket.on('stage:changed', (payload: { stage: Stage }) => {
-        if (conn.lastState) conn.lastState = { ...conn.lastState, stage: payload.stage }
+      socket.on('stage:changed', (payload: StageChangedPayload) => {
+        if (conn.lastState) {
+          let updated = { ...conn.lastState, stage: payload.stage }
+          if (payload.stage === 'voting') {
+            updated = {
+              ...updated,
+              questions: payload.questions ?? updated.questions,
+              myVotes: (payload.questions ?? updated.questions).map(() => null),
+              participants: updated.participants.map((p) => ({ ...p, voteCount: 0 })),
+            }
+          } else if (payload.stage === 'planning') {
+            updated = {
+              ...updated,
+              questions: [],
+              myVotes: [],
+              results: null,
+              participants: updated.participants.map((p) => ({ ...p, voteCount: 0 })),
+            }
+          }
+          conn.lastState = updated
+        }
         broadcast({ type: 'stage:changed', payload })
       })
 
@@ -68,16 +88,21 @@ self.onconnect = (event: MessageEvent) => {
         broadcast({ type: 'participant:left', payload })
       })
 
-      socket.on('participant:voted', (payload: { name: string; hasVoted: boolean }) => {
+      socket.on('participant:voted', (payload: { name: string; voteCount: number }) => {
         if (conn.lastState) {
           conn.lastState = {
             ...conn.lastState,
             participants: conn.lastState.participants.map((p) =>
-              p.name === payload.name ? { ...p, hasVoted: payload.hasVoted } : p,
+              p.name === payload.name ? { ...p, voteCount: payload.voteCount } : p,
             ),
           }
         }
         broadcast({ type: 'participant:voted', payload })
+      })
+
+      socket.on('results', (payload: ResultsPayload) => {
+        if (conn.lastState) conn.lastState = { ...conn.lastState, results: payload }
+        broadcast({ type: 'results', payload })
       })
 
       socket.on('room:closed', () => {
@@ -95,24 +120,34 @@ self.onconnect = (event: MessageEvent) => {
       })
     }
 
-    if (msg.type === 'end-voting' || msg.type === 'reset') {
+    if (msg.type === 'end-voting' || msg.type === 'revote' || msg.type === 'reset') {
       const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
       if (conn) conn.socket.emit(msg.type, {})
     }
 
+    if (msg.type === 'force-leave') {
+      const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
+      if (conn) {
+        for (const p of conn.ports) p.postMessage({ type: 'force-leave' } satisfies WorkerToTabMessage)
+        conn.socket.emit('close-room', {})
+        conn.socket.disconnect()
+        rooms.delete(connectedRoomId!)
+      }
+    }
+
     if (msg.type === 'start-voting') {
       const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
-      if (conn) conn.socket.emit('start-voting', { prompt: msg.prompt, options: msg.options })
+      if (conn) conn.socket.emit('start-voting', { questions: msg.questions })
     }
 
     if (msg.type === 'vote') {
       const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
-      if (conn) conn.socket.emit('vote', { value: msg.value })
+      if (conn) conn.socket.emit('vote', { questionIndex: msg.questionIndex, value: msg.value })
     }
 
     if (msg.type === 'unvote') {
       const conn = connectedRoomId ? rooms.get(connectedRoomId) : undefined
-      if (conn) conn.socket.emit('unvote', {})
+      if (conn) conn.socket.emit('unvote', { questionIndex: msg.questionIndex })
     }
 
     if (msg.type === 'leave') {

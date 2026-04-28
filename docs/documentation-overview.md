@@ -36,9 +36,9 @@ backend implementation details (state model, room lifecycle, server-side process
 ### [`front-end-guidelines.md`](front-end-guidelines.md)
 **What it covers:** Frontend engineering conventions — technology stack, project folder
 structure, component patterns, TypeScript conventions, state management approach
-(React Context + useReducer), socket lifecycle (per-room, not singleton), custom hook
-design, styling rules (CSS Modules, design tokens), import ordering, and a list of
-patterns to avoid.
+(SharedWorker + useRoom hook), custom hook design, styling rules (CSS Modules, design
+tokens), testing stack and patterns (Vitest + React Testing Library), import ordering,
+and a list of patterns to avoid.
 
 **Read this when:** You are writing any frontend code — components, hooks, or utilities.
 These are the rules the codebase is expected to follow.
@@ -58,12 +58,11 @@ decisions should come from this document, not be invented in component styleshee
 ---
 
 ### [`not_implemented.md`](not_implemented.md)
-**What it covers:** Features that are consciously deferred — currently: HTTP security
-headers (helmet), automated tests, and a CI pipeline. Each entry explains what the
-feature is, why it matters, and how it should be implemented when the time comes.
+**What it covers:** Features that are consciously deferred — currently: a CI pipeline.
+Each entry explains what the feature is, why it matters, and how it should be implemented
+when the time comes.
 
-**Read this when:** You are assessing production readiness, planning future work, or
-wondering why an otherwise-standard feature is absent.
+**Read this when:** You are assessing production readiness or planning future work.
 
 ---
 
@@ -82,4 +81,6 @@ wondering why an otherwise-standard feature is absent.
 | How should I handle the socket lifecycle? | `front-end-guidelines.md` |
 | What colour token should I use for a success indicator? | `visual-design.md` |
 | What is the correct padding for a card? | `visual-design.md` |
-| Why are there no tests? | `not_implemented.md` |
+| How do I run the tests? | `CLAUDE.md` |
+| How should I write tests for a component? | `front-end-guidelines.md` |
+| What CI pipeline is planned? | `not_implemented.md` |

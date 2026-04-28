@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
+import type { ParticipantView, WorkerToTabMessage } from '../workers/roomWorkerTypes.js'
 import styles from './RoomPage.module.css'
 
 const BACKEND_URL =
@@ -10,9 +11,12 @@ type Status = 'loading' | 'found' | 'not-found' | 'error'
 
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>()
-  const token = roomId ? sessionStorage.getItem(`facilitator-token-${roomId}`) : null
+  const token = roomId ? localStorage.getItem(`facilitator-token-${roomId}`) : null
   const role = token ? 'facilitator' : 'participant'
   const [status, setStatus] = useState<Status>('loading')
+  const [participants, setParticipants] = useState<ParticipantView[]>([])
+  const [myName, setMyName] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   useEffect(() => {
     if (!roomId) {
@@ -32,6 +36,39 @@ export default function RoomPage() {
       cancelled = true
     }
   }, [roomId])
+
+  useEffect(() => {
+    if (status !== 'found' || !roomId) return
+
+    const worker = new SharedWorker(
+      new URL('../workers/roomWorker.ts', import.meta.url),
+      { type: 'module' },
+    )
+
+    worker.port.start()
+    worker.port.postMessage({ type: 'join', backendUrl: BACKEND_URL, roomId, role, token })
+
+    worker.port.onmessage = (e: MessageEvent<WorkerToTabMessage>) => {
+      const msg = e.data
+      if (msg.type === 'room:state') {
+        setMyName(msg.payload.myName)
+        setParticipants(msg.payload.participants)
+      } else if (msg.type === 'participant:joined') {
+        setParticipants((prev) => [...prev, msg.payload])
+      } else if (msg.type === 'participant:left') {
+        setParticipants((prev) => prev.filter((p) => p.name !== msg.payload.name))
+      } else if (msg.type === 'connect_error') {
+        console.error('Socket connection error:', msg.message)
+      } else if (msg.type === 'error') {
+        console.error('Socket error:', msg.payload.message)
+      }
+    }
+
+    return () => {
+      worker.port.postMessage({ type: 'leave' })
+      worker.port.close()
+    }
+  }, [status, roomId, role, token])
 
   if (status === 'loading') {
     return (
@@ -69,12 +106,40 @@ export default function RoomPage() {
     )
   }
 
-  // status === 'found' — stub until room UI is implemented
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: '2rem', textAlign: 'center' }}>
-      <h1>Room: {roomId}</h1>
-      <p>Role: {role}</p>
-      <p style={{ color: '#666' }}>Room view coming soon.</p>
+    <div className={styles.roomLayout}>
+      <main className={styles.mainContent}>
+        <div style={{ padding: '2rem' }}>
+          <h1>Room: {roomId}</h1>
+          <p>
+            You are: {myName ?? '…'} ({role})
+          </p>
+          <p style={{ color: '#666' }}>Room view coming soon.</p>
+        </div>
+      </main>
+
+      <aside className={`${styles.sidebar} ${sidebarOpen ? '' : styles.sidebarCollapsed}`}>
+        <button
+          className={styles.sidebarToggle}
+          onClick={() => setSidebarOpen((o) => !o)}
+          aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          {sidebarOpen ? '›' : '‹'}
+        </button>
+        {sidebarOpen && (
+          <div className={styles.sidebarContent}>
+            <h2 className={styles.sidebarHeading}>Participants ({participants.length})</h2>
+            <ul className={styles.participantList}>
+              {participants.map((p) => (
+                <li key={p.name} className={styles.participantItem}>
+                  {p.name}
+                  {p.name === myName && <span className={styles.you}> (you)</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </aside>
     </div>
   )
 }

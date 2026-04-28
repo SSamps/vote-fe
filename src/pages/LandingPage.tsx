@@ -33,7 +33,7 @@ export default function LandingPage() {
       if (!res.ok) throw new Error(`Unexpected status ${res.status}`)
       const { roomId, token } = (await res.json()) as { roomId: string; token: string }
       sessionStorage.setItem(`facilitator-token-${roomId}`, token)
-      navigate(`/room/${roomId}?role=facilitator`)
+      navigate(`/room/${roomId}`)
     } catch {
       setError('Could not create a room. Is the backend running?')
     } finally {
